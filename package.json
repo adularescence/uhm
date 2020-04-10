@@ -1,0 +1,39 @@
+{
+  "name": "uhm",
+  "version": "0.0.1",
+  "description": "![Origins](/uhm.png)",
+  "main": "src/index.ts",
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "pg": "^7.12.1"
+  },
+  "devDependencies": {
+    "@types/node": "^12.12.6",
+    "@types/pg": "^7.11.2",
+    "nodemon": "^1.19.4",
+    "rimraf": "^3.0.0",
+    "ts-node": "^8.4.1",
+    "tslint": "^5.20.1",
+    "typescript": "^3.7.2"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rimraf dist/*",
+    "dev": "nodemon --watch src -e ts --exec npm run dev:start",
+    "dev:start": "npm run build && npm run start",
+    "lint": "tslint -c tslint.json -p tsconfig.json --fix",
+    "prebuild": "npm run clean && npm run lint",
+    "start": "node dist/",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adularescence/uhm.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/adularescence/uhm/issues"
+  },
+  "homepage": "https://github.com/adularescence/uhm#readme"
+}
