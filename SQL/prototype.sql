@@ -5,12 +5,12 @@ CREATE TABLE book(
     genre TEXT NOT NULL,
     publisher TEXT NOT NULL,
     pages INT NOT NULL,
-    price NUMERIC(5, 2) NOT NULL,
+    price MONEY NOT NULL,
     royalty NUMERIC (3, 2) NOT NULL,
     count INT NOT NULL
 );
 
-CREATE TABLE user(
+CREATE TABLE users(
     user_id SERIAL PRIMARY KEY,
     username TEXT NOT NULL
 );
@@ -23,9 +23,9 @@ CREATE TABLE publisher(
     banking_account INT NOT NULL
 );
 
-CREATE TABLE order(
+CREATE TABLE orders(
     id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES user,
+    user_id INT REFERENCES users,
     current_location TEXT NOT NULL,
     creation_timestamp TIMESTAMP NOT NULL,
     fulfillment_timestamp TIMESTAMP
@@ -33,4 +33,17 @@ CREATE TABLE order(
 
 CREATE TABLE accounting(
     cash MONEY PRIMARY KEY
-;)
+);
+
+/* bogus books */
+INSERT INTO book VALUES (
+    '978-1506710310',
+    'NieR: Automata World Guide Volume 1',
+    'Square Enix',
+    'Video Game',
+    'Dark Horse Books',
+    192,
+    43.43,
+    0.10,
+    1
+);

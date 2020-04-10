@@ -1,4 +1,9 @@
+import Postgres from "pg";
 import readline from "readline";
+import auth = require("./auth.json");
+
+const pgClient = new Postgres.Client(auth.pg);
+pgClient.connect();
 
 const scanner = readline.createInterface({
     input: process.stdin,
@@ -12,8 +17,22 @@ const askQuestion = (query: string) => {
     });
 };
 
+const asyncForEach = async (array: any[], callback) => {
+    for (let index = 0; index < array.length; index++) {
+        await callback(array[index], index, array);
+    }
+};
+
 const userRepl = async () => {
     let command: string = "";
+    const searchQueryTypes = {
+        authorName: false,
+        bookName: true,
+        genre: false,
+        pages: false,
+        price: false,
+        publisher: false,
+    };
     const help: string = `
 "user" mode: browse books or view orders
 
@@ -25,7 +44,7 @@ Commands:
     - search
         Begin a book search, in which a sequence of query types prompts will be shown.
         Entering nothing for a query type will mean it is ignored in the search.
-        Default 'on' query types are [bookname, authorname, genre, publisher, price]
+        Default 'on' query types are [bookname]
 
     - <query type> [on|off]
         'on' means that you will be prompted for that query type in a book search.
@@ -43,8 +62,29 @@ Commands:
     while (command.toLowerCase() !== "exit") {
         command = await askQuestion("> ");
 
-        if (command === "help") {
+        if (command.toLowerCase() === "help") {
             console.log(help);
+        } else if (command.toLowerCase() === "search") {
+            const searchOptions = {};
+
+            await asyncForEach(Object.keys(searchQueryTypes), async (queryType: string) => {
+                if (searchQueryTypes[`${queryType}`]) {
+                    searchOptions[`${queryType}`] = await askQuestion(`${queryType}?\n`);
+                }
+            });
+
+            let queryText = `SELECT * FROM book`;
+            if (Object.keys(searchOptions).length !== 0) {
+                const queryTextHelper = [];
+                Object.keys(searchOptions).forEach((queryType) => {
+                    queryTextHelper.push(`${queryType.replace("Name", "_name")} = '${searchOptions[`${queryType}`]}'`);
+                });
+                queryText = `${queryText} WHERE ${queryTextHelper.join(" AND ")}`;
+            }
+
+            console.log(queryText);
+            const dbRes = await pgClient.query(queryText);
+            console.log(dbRes.rows);
         }
     }
 };
