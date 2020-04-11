@@ -21,10 +21,10 @@ Commands:
         Entering nothing for a query type will mean it is ignored in the search.
         Default 'on' query types are [bookname]
 
-    - <query type> [on|off]
+    - turn <query type> [on|off]
         'on' means that you will be prompted for that query type in a book search.
         'off' means that you will not be prompted for that query type in a book search (i.e. auto-ignore).
-        Available query types: [bookname, authorname, genre, publisher, pages, price, isbn].
+        Available query types: [authorname, bookname, genre, pages, price, publisher].
 
     - order [number]
         Specifying a number will show that order only.
@@ -73,21 +73,23 @@ const asyncForEach = async (array: any[], callback) => {
 const loggedInRepl = async (ownerMode: boolean) => {
     let command: string = "";
     const searchQueryTypes = {
-        "Author Name": false,
-        "Book Name": true,
-        "Genre": false,
-        "Pages": false,
-        "Price": false,
-        "Publisher": false,
+        authorname: false,
+        bookname: true,
+        genre: false,
+        pages: false,
+        price: false,
+        publisher: false,
     };
     const help: string = `${userHelp}${ownerMode ? ownerHelp : ""}`;
     console.log(help);
     while (command.toLowerCase() !== "exit") {
-        command = (await askQuestion("> ")).trim();
+        const input = (await askQuestion("> ")).trim().split(" ").map((elem) => elem.toLowerCase() );
+        command = input[0];
+        const argv = input.splice(1);
 
-        if (command.toLowerCase() === "help") {
+        if (command === "help") {
             console.log(help);
-        } else if (command.toLowerCase() === "search") {
+        } else if (command === "search") {
             const searchOptions = {};
 
             await asyncForEach(Object.keys(searchQueryTypes), async (queryType: string) => {
@@ -100,7 +102,7 @@ const loggedInRepl = async (ownerMode: boolean) => {
             if (Object.keys(searchOptions).length !== 0) {
                 const queryTextHelper = [];
                 Object.keys(searchOptions).forEach((queryType) => {
-                    queryTextHelper.push(`${queryType.toLowerCase().replace(" name", "_name")} = '${searchOptions[`${queryType}`]}'`);
+                    queryTextHelper.push(`${queryType.replace("name", "_name")} = '${searchOptions[`${queryType}`]}'`);
                 });
                 queryText = `${queryText} WHERE ${queryTextHelper.join(" AND ")}`;
             }
@@ -108,6 +110,16 @@ const loggedInRepl = async (ownerMode: boolean) => {
             console.log(queryText);
             const dbRes = await pgClient.query(queryText);
             console.log(dbRes.rows);
+        } else if (command === "turn") {
+            // ensure that there are 2 arguments, the 0th argument is a valid query type, and the 1st argument is either "on" or "off"
+            if (argv.length === 2 && Object.keys(searchQueryTypes).includes(argv[0]) && (argv[1] === "on" || argv[1] === "off")) {
+                // enable/disable that query type
+                const newState = argv[1] === "on";
+                console.log(`Search ${newState ? "includes" : "excludes"} ${argv[0]} now.`);
+                searchQueryTypes[`${argv[0]}`] = newState;
+            } else {
+                console.log(`Need to specify a query type from ["${Object.keys(searchQueryTypes).join('", "')}"], and whether to turn it on or off.`);
+            }
         }
     }
 };
