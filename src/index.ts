@@ -6,8 +6,6 @@ import auth = require("./auth.json");
 const pgClient = new Postgres.Client(auth.pg);
 pgClient.connect();
 
-let currentUser: number = -1;
-let adminUser: boolean = false;
 const userHelp = `
 "user" mode: browse books or view orders
 
@@ -70,7 +68,7 @@ const asyncForEach = async (array: any[], callback) => {
 };
 
 // REPLs for the program
-const loggedInRepl = async (ownerMode: boolean) => {
+const loggedInRepl = async (username: string, ownerMode: boolean) => {
     let command: string = "";
     const searchQueryTypes = {
         authorname: false,
@@ -120,6 +118,18 @@ const loggedInRepl = async (ownerMode: boolean) => {
             } else {
                 console.log(`Need to specify a query type from ["${Object.keys(searchQueryTypes).join('", "')}"], and whether to turn it on or off.`);
             }
+        } else if (command === "order") {
+            let queryText = `SELECT * FROM orders WHERE username = ${username}`;
+            let dbRes;
+            if (argv.length === 1) {
+                queryText = `${queryText} AND id = $1`;
+                console.log(queryText);
+                dbRes = await pgClient.query(queryText, [argv[0]]);
+            } else {
+                console.log(queryText);
+                dbRes = await pgClient.query(queryText);
+            }
+            console.log(dbRes.rows);
         }
     }
 };
@@ -137,9 +147,7 @@ const mainRepl = async () => {
             const dbRes = await pgClient.query(`SELECT * FROM users WHERE username = '${username}' AND not_salty_password = '${password}'`);
             if (dbRes.rows.length === 1) {
                 const loggedIn = dbRes.rows[0];
-                currentUser = loggedIn.username;
-                adminUser = loggedIn.admin_account;
-                await loggedInRepl(adminUser);
+                await loggedInRepl(loggedIn.username, loggedIn.admin_account);
             } else {
                 console.error("Sorry, you're not in the database (which means you should make a new user), or the password you entered is not the correct one.");
             }
