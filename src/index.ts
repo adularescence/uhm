@@ -71,12 +71,12 @@ const askQuestion = (query: string) => {
         scanner.question(query, resolve);
     });
 };
-const asyncForEach = async (array: any[], callback) => {
+const asyncForEach = async (array: any[], callback: any) => {
     for (let index = 0; index < array.length; index++) {
         await callback(array[index], index, array);
     }
 };
-const search = async () => {
+const search = async (guestMode: boolean, ownerMode: boolean) => {
     const searchOptions = {};
 
     await asyncForEach(Object.keys(searchQueryTypes), async (queryType: string) => {
@@ -94,9 +94,54 @@ const search = async () => {
         queryText = `${queryText} WHERE ${queryTextHelper.join(" AND ")}`;
     }
 
-    console.log(queryText);
+    console.log(queryText); // debug
     const dbRes = await pgClient.query(queryText);
-    console.log(dbRes.rows);
+    const books = dbRes.rows;
+    if (books.length === 0) {
+        console.log("No books with specified search options found.");
+    } else {
+        let foundBooks = true;
+        let bookIndex = -1;
+        let bookInfo = "";
+        while (foundBooks) {
+            console.clear();
+
+            const browsingCommand = (await askQuestion(`Viewing the found books. "next" or "prev" for next/previous book. "exit" to exit.\n${bookInfo}\n`)).trim().toLowerCase();
+            if (browsingCommand === "next") {
+                if (bookIndex < (books.length - 1)) {
+                    bookIndex++;
+                    bookInfo = bookInfoTemplate(books[bookIndex], ownerMode);
+                } else if (bookInfo[bookInfo.length - 1] !== "!") {
+                    bookInfo += "\nNo next book!";
+                }
+            } else if (browsingCommand === "prev") {
+                if (bookIndex > 0) {
+                    bookIndex--;
+                    bookInfo = bookInfoTemplate(books[bookIndex], ownerMode);
+                } else if (bookInfo[bookInfo.length - 1] !== "!") {
+                    bookInfo += "\nNo previous book!";
+                }
+            } else if (browsingCommand === "exit") {
+                foundBooks = false;
+            }
+        }
+    }
+};
+const bookInfoTemplate: (book: any, ownerMode: boolean) => string = (book: any, ownerMode: boolean) => {
+    const baseBookInfo = `
+    Name:\t\t${book.book_name}
+    Author:\t\t${book.author_name}
+    Genre:\t\t${book.genre}
+    Publisher:\t\t${book.publisher}
+    Pages:\t\t${book.pages}
+    Price:\t\t${book.price}`;
+
+    const ownerBookInfo = `
+
+    Royalty:\t\t${book.royalty * 100}%
+    Stock:\t\t${book.count} Copies Remaining`;
+
+    return `${baseBookInfo}${ownerMode ? ownerBookInfo : ""}`;
 };
 
 // REPLs for the program
@@ -105,14 +150,14 @@ const loggedInRepl = async (username: string, ownerMode: boolean) => {
     const help: string = `${userHelp}${ownerMode ? ownerHelp : ""}`;
     console.log(help);
     while (command.toLowerCase() !== "exit") {
-        const input = (await askQuestion("> ")).trim().split(" ").map((elem) => elem.toLowerCase() );
+        const input = (await askQuestion(`${username}${ownerMode ? "[OWNER]" : ""}> `)).trim().split(" ").map((elem) => elem.toLowerCase() );
         command = input[0];
         const argv = input.splice(1);
 
         if (command === "help") {
             console.log(help);
         } else if (command === "search") {
-            search();
+            await search(false, ownerMode);
         } else if (command === "turn") {
             // ensure that there are 2 arguments, the 0th argument is a valid query type, and the 1st argument is either "on" or "off"
             if (argv.length === 2 && Object.keys(searchQueryTypes).includes(argv[0]) && (argv[1] === "on" || argv[1] === "off")) {
@@ -135,6 +180,8 @@ const loggedInRepl = async (username: string, ownerMode: boolean) => {
                 dbRes = await pgClient.query(queryText);
             }
             console.log(dbRes.rows);
+        } else if (command === "clear") {
+            console.clear();
         }
     }
 };
@@ -177,7 +224,7 @@ const mainRepl = async () => {
                 console.log("A new user has been added to the database.\n");
             }
         } else if (command === "search") {
-            search();
+            await search(true, false);
         } else if (command === "help") {
             console.log(`Search Commands For Guests:\n${searchHelp}`);
         }

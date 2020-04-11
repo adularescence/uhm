@@ -48,6 +48,39 @@ INSERT INTO book VALUES (
     0.10,
     1
 );
+INSERT INTO book VALUES (
+    '978-1285741550',
+    'Calculus: Early Transcendentals',
+    'James Stewart',
+    'Textbook',
+    'Brooks Cole',
+    1368,
+    189.57,
+    0.10,
+    1
+);
+INSERT INTO book VALUES (
+    '978-1974701629',
+    'NieR:Automata: Long Story Short',
+    'Yoko Taro',
+    'Video Game',
+    'Viz Media',
+    256,
+    19.69,
+    0.10,
+    1
+);
+INSERT INTO book VALUES (
+    '978-1974701841',
+    'NieR:Automata: Short Story Long',
+    'Yoko Taro',
+    'Video Game',
+    'Viz Media',
+    256,
+    19.69,
+    0.10,
+    1
+);
 
 /* bogus users */
 INSERT INTO users (username, not_salty_password, admin_account) VALUES (
