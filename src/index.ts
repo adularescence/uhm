@@ -65,7 +65,7 @@ Commands:
     `;
     console.log(help);
     while (command.toLowerCase() !== "exit") {
-        command = await askQuestion("> ");
+        command = (await askQuestion("> ")).trim();
 
         if (command.toLowerCase() === "help") {
             console.log(help);
@@ -74,7 +74,7 @@ Commands:
 
             await asyncForEach(Object.keys(searchQueryTypes), async (queryType: string) => {
                 if (searchQueryTypes[`${queryType}`]) {
-                    searchOptions[`${queryType}`] = await askQuestion(`${queryType}?\n`);
+                    searchOptions[`${queryType}`] = (await askQuestion(`${queryType}?\n`)).trim();
                 }
             });
 
@@ -97,13 +97,13 @@ const mainRepl = async () => {
     let command: string = "";
     const prompt = "Why are you here?\nI am a [user, owner, newuser]:\n> ";
     while (command.toLowerCase() !== "exit") {
-        command = await askQuestion(prompt);
+        command = (await askQuestion(prompt)).trim();
 
         if (command === "user") {
-            const username = await askQuestion("What is your username?\n> ");
+            const username = (await askQuestion("What is your username?\n> ")).trim();
             // just gonna leave their password right out in the open
             // their passwords are also stored in plaintext
-            const password = await askQuestion("What is the password?\n> ");
+            const password = (await askQuestion("What is the password?\n> ")).trim();
             const dbRes = await pgClient.query(`SELECT * FROM users WHERE username = '${username}' AND not_salty_password = '${password}'`);
             if (dbRes.rows.length === 1) {
                 const loggedIn = dbRes.rows[0];
@@ -120,7 +120,7 @@ const mainRepl = async () => {
             let newUsername = "";
             let usernameExists = true;
             while (usernameExists) {
-                newUsername = await askQuestion("What would you like your new username to be?\n> ");
+                newUsername = (await askQuestion("What would you like your new username to be?\n> ")).trim();
                 usernameExists = false;
                 existingUsers.forEach((existingUser) => {
                     if (existingUser.username === newUsername) {
@@ -129,9 +129,9 @@ const mainRepl = async () => {
                     }
                 });
             }
-            const password = await askQuestion("What would you like your new password to be?\n> ");
-            const accept = await askQuestion(`Your username shall be '${newUsername} and your password shall be ${password}, is this okay (Y/n)?\n> `);
-            if (accept.toLowerCase() === "y" || accept.toLowerCase() === "yes" || accept.trim() === "") {
+            const password = (await askQuestion("What would you like your new password to be?\n> ")).trim();
+            const accept = (await askQuestion(`Your username shall be '${newUsername} and your password shall be ${password}, is this okay (Y/n)?\n> `)).trim();
+            if (accept.toLowerCase() === "y" || accept.toLowerCase() === "yes" || accept === "") {
                 await pgClient.query("INSERT INTO users (username, not_salty_password, admin_account) VALUES ($1, $2, $3)", [newUsername, password, false]);
                 console.log("A new user has been added to the database.\n");
             }
