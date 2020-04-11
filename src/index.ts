@@ -8,37 +8,7 @@ pgClient.connect();
 
 let currentUser: number = -1;
 let adminUser: boolean = false;
-
-const scanner = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: false
-});
-
-// Helper Functions
-const askQuestion = (query: string) => {
-    return new Promise<string>((resolve) => {
-        scanner.question(query, resolve);
-    });
-};
-const asyncForEach = async (array: any[], callback) => {
-    for (let index = 0; index < array.length; index++) {
-        await callback(array[index], index, array);
-    }
-};
-
-// REPLs for the program
-const userRepl = async () => {
-    let command: string = "";
-    const searchQueryTypes = {
-        "Author Name": false,
-        "Book Name": true,
-        "Genre": false,
-        "Pages": false,
-        "Price": false,
-        "Publisher": false,
-    };
-    const help: string = `
+const userHelp = `
 "user" mode: browse books or view orders
 
 Commands:
@@ -62,7 +32,55 @@ Commands:
 
     - exit
         Exits from "user" mode.
-    `;
+`;
+const ownerHelp = `
+
+Owner Commands:
+    - add
+        Add a new book to your bookstore.
+        Prompts you for all the required fields.
+        Also prompts you to add a new publisher, if needed.
+
+    - delete <ISBN>
+        Remove a book from your bookstore.
+
+    - publisher [name]
+        View info for given publisher, or all of them if name is omitted.
+
+    - money
+        Show how much cash you have.
+`;
+
+const scanner = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: false
+});
+
+// Helper Functions
+const askQuestion = (query: string) => {
+    return new Promise<string>((resolve) => {
+        scanner.question(query, resolve);
+    });
+};
+const asyncForEach = async (array: any[], callback) => {
+    for (let index = 0; index < array.length; index++) {
+        await callback(array[index], index, array);
+    }
+};
+
+// REPLs for the program
+const loggedInRepl = async (ownerMode: boolean) => {
+    let command: string = "";
+    const searchQueryTypes = {
+        "Author Name": false,
+        "Book Name": true,
+        "Genre": false,
+        "Pages": false,
+        "Price": false,
+        "Publisher": false,
+    };
+    const help: string = `${userHelp}${ownerMode ? ownerHelp : ""}`;
     console.log(help);
     while (command.toLowerCase() !== "exit") {
         command = (await askQuestion("> ")).trim();
@@ -95,7 +113,7 @@ Commands:
 };
 const mainRepl = async () => {
     let command: string = "";
-    const prompt = "Why are you here?\nI am a [user, owner, newuser]:\n> ";
+    const prompt = "Why are you here?\nI am a [user, newuser]:\n> ";
     while (command.toLowerCase() !== "exit") {
         command = (await askQuestion(prompt)).trim();
 
@@ -108,13 +126,11 @@ const mainRepl = async () => {
             if (dbRes.rows.length === 1) {
                 const loggedIn = dbRes.rows[0];
                 currentUser = loggedIn.username;
-                adminUser = false;
-                await userRepl();
+                adminUser = loggedIn.admin_account;
+                await loggedInRepl(adminUser);
             } else {
                 console.error("Sorry, you're not in the database (which means you should make a new user), or the password you entered is not the correct one.");
             }
-        } else if (command === "owner") {
-            adminUser = true;
         } else if (command === "newuser") {
             const existingUsers = (await pgClient.query("SELECT username FROM users")).rows;
             let newUsername = "";
