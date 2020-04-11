@@ -107,7 +107,7 @@ const mainRepl = async () => {
             const dbRes = await pgClient.query(`SELECT * FROM users WHERE username = '${username}' AND not_salty_password = '${password}'`);
             if (dbRes.rows.length === 1) {
                 const loggedIn = dbRes.rows[0];
-                currentUser = loggedIn.user_id;
+                currentUser = loggedIn.username;
                 adminUser = false;
                 await userRepl();
             } else {
@@ -116,7 +116,25 @@ const mainRepl = async () => {
         } else if (command === "owner") {
             adminUser = true;
         } else if (command === "newuser") {
-            // placeholder
+            const existingUsers = (await pgClient.query("SELECT username FROM users")).rows;
+            let newUsername = "";
+            let usernameExists = true;
+            while (usernameExists) {
+                newUsername = await askQuestion("What would you like your new username to be?\n> ");
+                usernameExists = false;
+                existingUsers.forEach((existingUser) => {
+                    if (existingUser.username === newUsername) {
+                        usernameExists = true;
+                        console.log("That username is already taken.");
+                    }
+                });
+            }
+            const password = await askQuestion("What would you like your new password to be?\n> ");
+            const accept = await askQuestion(`Your username shall be '${newUsername} and your password shall be ${password}, is this okay (Y/n)?\n> `);
+            if (accept.toLowerCase() === "y" || accept.toLowerCase() === "yes" || accept.trim() === "") {
+                await pgClient.query("INSERT INTO users (username, not_salty_password, admin_account) VALUES ($1, $2, $3)", [newUsername, password, false]);
+                console.log("A new user has been added to the database.\n");
+            }
         }
     }
     console.log("Exiting");

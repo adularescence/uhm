@@ -11,8 +11,7 @@ CREATE TABLE book(
 );
 
 CREATE TABLE users(
-    user_id SERIAL PRIMARY KEY,
-    username TEXT NOT NULL,
+    username TEXT PRIMARY KEY,
     not_salty_password TEXT NOT NULL,
     admin_account BOOLEAN NOT NULL
 );
@@ -27,7 +26,7 @@ CREATE TABLE publisher(
 
 CREATE TABLE orders(
     id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES users,
+    username TEXT REFERENCES users,
     current_location TEXT NOT NULL,
     creation_timestamp TIMESTAMP NOT NULL,
     fulfillment_timestamp TIMESTAMP
