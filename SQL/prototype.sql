@@ -12,7 +12,9 @@ CREATE TABLE book(
 
 CREATE TABLE users(
     user_id SERIAL PRIMARY KEY,
-    username TEXT NOT NULL
+    username TEXT NOT NULL,
+    not_salty_password TEXT NOT NULL,
+    admin_account BOOLEAN NOT NULL
 );
 
 CREATE TABLE publisher(
@@ -47,3 +49,17 @@ INSERT INTO book VALUES (
     0.10,
     1
 );
+
+/* bogus users */
+INSERT INTO users (username, not_salty_password, admin_account) VALUES (
+    'kvn',
+    'asdfjkl;',
+    'false'
+);
+
+/* remove tables */
+DROP TABLE accounting;
+DROP TABLE orders;
+DROP TABLE publisher;
+DROP TABLE users;
+DROP TABLE book;
