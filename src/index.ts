@@ -3,7 +3,31 @@ import readline from "readline";
 import auth = require("./auth.json");
 
 // Globals
-const pgClient = new Postgres.Client(auth.pg);
+declare interface Book {
+    author_name: string;
+    book_name: string;
+    count: number;
+    genre: string;
+    isbn: string;
+    pages: number;
+    publisher: string;
+    price: number;
+    royalty: number;
+}
+declare interface ContactInfo {
+    address: string;
+    city: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    postalCode: string;
+}
+declare interface BillingInfo extends ContactInfo {
+    cardNumber: string;
+    cvv: string;
+    expiryDate: string;
+}
+const pgClient: Postgres.Client = new Postgres.Client(auth.pg);
 pgClient.connect();
 
 const searchQueryTypes = {
@@ -14,8 +38,27 @@ const searchQueryTypes = {
     price: false,
     publisher: false,
 };
+const contactInfoPatterns: ContactInfo = {
+    address: "^\\d+ [A-Z][a-z]+ [A-Z][a-z]+$",
+    city: "^[A-Za-z\\-]+$",
+    firstName: "^[A-Za-z]+$",
+    lastName: "^[A-Za-z]+$",
+    phone: "^\\d{3}-\\d{3}-\\d{4}$",
+    postalCode: "^[A-Z]\\d[A-Z] \\d[A-Z]\\d$",
+};
+const billingInfoPatterns: BillingInfo = {
+    address: "^\\d+ [A-Z][a-z]+ [A-Z][a-z]+$",
+    cardNumber: "^\\d{16}$",
+    city: "^[A-Za-z\\-]+$",
+    cvv: "^\\d{3}$",
+    expiryDate: "^\\d{2}/\\d{2}$",
+    firstName: "^[A-Za-z]+$",
+    lastName: "^[A-Za-z]+$",
+    phone: "^\\d{3}-\\d{3}-\\d{4}$",
+    postalCode: "^[A-Z]\\d[A-Z] \\d[A-Z]\\d$",
+};
 
-const searchHelp = `
+const searchHelp: string = `
     - search
         Begin a book search, in which a sequence of query types prompts will be shown.
         Entering nothing for a query type will mean it is ignored in the search.
@@ -26,7 +69,7 @@ const searchHelp = `
         'off' means that you will not be prompted for that query type in a book search (i.e. auto-ignore).
         Available query types: [authorname, bookname, genre, pages, price, publisher].
 `;
-const userHelp = `
+const userHelp: string = `
 "user" mode: browse books or view orders
 
 Commands:
@@ -41,7 +84,7 @@ ${searchHelp}
     - exit
         Exits from "user" mode.
 `;
-const ownerHelp = `
+const ownerHelp: string = `
 
 Owner Commands:
     - add
@@ -59,7 +102,7 @@ Owner Commands:
         Show how much cash you have.
 `;
 
-const scanner = readline.createInterface({
+const scanner: readline.Interface = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     terminal: false
@@ -67,20 +110,20 @@ const scanner = readline.createInterface({
 
 let guestMode: boolean = true;
 let ownerMode: boolean = false;
-let userCart: any[] = [];
+let userCart: Book[] = [];
 
 // Helper Functions
-const askQuestion = (query: string) => {
+const askQuestion: (query: string) => Promise<string> = (query: string) => {
     return new Promise<string>((resolve) => {
         scanner.question(query, resolve);
     });
 };
-const asyncForEach = async (array: any[], callback: any) => {
+const asyncForEach: (array: any[], callback: any) => Promise<void> = async (array: any[], callback: any) => {
     for (let index = 0; index < array.length; index++) {
         await callback(array[index], index, array);
     }
 };
-const search = async () => {
+const search: () => Promise<void> = async () => {
     const searchOptions = {};
 
     await asyncForEach(Object.keys(searchQueryTypes), async (queryType: string) => {
@@ -110,7 +153,7 @@ const search = async () => {
         }
     }
 };
-const turn = async (argv: any) => {
+const turn: (argv: string[]) => Promise<void> = async (argv: string[]) => {
     // ensure that there are 2 arguments, the 0th argument is a valid query type, and the 1st argument is either "on" or "off"
     if (argv.length === 2 && Object.keys(searchQueryTypes).includes(argv[0]) && (argv[1] === "on" || argv[1] === "off")) {
         // enable/disable that query type
@@ -121,8 +164,8 @@ const turn = async (argv: any) => {
         console.log(`Need to specify a query type from ["${Object.keys(searchQueryTypes).join('", "')}"], and whether to turn it on or off.`);
     }
 };
-const bookInfoTemplate: (books: any, bookIndex: number) => string = (books: any, bookIndex: number) => {
-    const book = books[bookIndex];
+const bookInfoTemplate: (books: Book[], bookIndex: number) => string = (books: Book[], bookIndex: number) => {
+    const book: Book = books[bookIndex];
     const baseBookInfo = `
 Book ${bookIndex + 1} of ${books.length}
 
@@ -140,16 +183,13 @@ Book ${bookIndex + 1} of ${books.length}
 
     return `${baseBookInfo}${ownerMode ? ownerBookInfo : ""}`;
 };
-const browseBooks: (books: any, cart: boolean) => any = async (books: any, inCart: boolean) => {
-    const cart = inCart ? books : [];
-    let browsing = true;
-    let bookIndex = 0;
-    let bookInfo = books.length !== 0 ? bookInfoTemplate(books, bookIndex) : "No books in your cart.";
-    let browsingCommand = "";
-    while (browsing) {
+const browseBooks: (books: Book[], cart: boolean) => Promise<Book[]> = async (books: Book[], inCart: boolean) => {
+    const cart: Book[] = inCart ? books : [];
+    let bookIndex: number = 0;
+    let bookInfo: string = books.length !== 0 ? bookInfoTemplate(books, bookIndex) : "No books in your cart.";
+    let browsingCommand: string = "";
+    while (browsingCommand !== "exit") {
         console.clear();
-
-        console.log(bookIndex);
 
         browsingCommand = (await askQuestion(`Viewing the ${inCart ? "books in your cart." : "found books"}.
 "next" or "prev" for next/previous book.${(guestMode || ownerMode || inCart) ? "" : `\n"add" to add current book to cart.`}${inCart ? `\n"drop" to remove current book from cart.` : ""}
@@ -191,22 +231,113 @@ const browseBooks: (books: any, cart: boolean) => any = async (books: any, inCar
                 bookInfo = `No more books in your cart.`;
             }
             bookInfo += `\nDropped ${dropFromCart.book_name} from your cart.`;
-        } else if (browsingCommand === "exit") {
-            browsing = false;
         }
     }
     return cart;
 };
+const checkout: () => Promise<void> = async () => {
+    const contactInfo: ContactInfo = {
+        address: "",
+        city: "",
+        firstName: "",
+        lastName: "",
+        phone: "",
+        postalCode: ""
+    };
+    const billingInfo: BillingInfo = {
+        address: "",
+        cardNumber: "",
+        city: "",
+        cvv: "",
+        expiryDate: "",
+        firstName: "",
+        lastName: "",
+        phone: "",
+        postalCode: ""
+    };
+    let nevermind: boolean = false;
+
+    console.log(`Beginning the checkout process. Follow the prompts, and type "exit" to exit at anytime.`);
+    await asyncForEach(Object.keys(contactInfo), async (target: string) => {
+        if (nevermind) {
+            return;
+        }
+        const response: string = await checkoutChecker(`What is your ${target}?\n`, contactInfoPatterns[`${target}`]);
+        if (response === "exit") {
+            nevermind = true;
+        } else {
+            contactInfo[`${target}`] = response;
+        }
+    });
+    if (nevermind) {
+        return;
+    }
+
+    const sameAsContact: string = (await askQuestion(`Is your billing info the same as your contact info (yes, no)?`)).trim().toLowerCase();
+    if (sameAsContact === "no") {
+        await asyncForEach(Object.keys(billingInfo), async (target: string) => {
+            if (nevermind) {
+                return;
+            }
+            const response: string = await checkoutChecker(`What is your ${target}?\n`, billingInfoPatterns[`${target}`]);
+            if (response === "exit") {
+                nevermind = true;
+            } else {
+                billingInfo[`${target}`] = response;
+            }
+        });
+        if (nevermind) {
+            return;
+        }
+    } else if (sameAsContact === "exit") {
+        return;
+    } else {
+        Object.keys(contactInfo).forEach((key: string) => {
+            billingInfo[`${key}`] = contactInfo[`${key}`];
+        });
+        await asyncForEach(["cardNumber", "cvv", "expiryDate"], async (target: string) => {
+            if (nevermind) {
+                return;
+            }
+            const response = await checkoutChecker(`What is your ${target}?\n`, billingInfoPatterns[`${target}`]);
+            if (response === "exit") {
+                nevermind = true;
+            } else {
+                billingInfo[`${target}`] = response;
+            }
+        });
+        if (nevermind) {
+            return;
+        }
+    }
+
+    const placeholder: string = "100";
+    userCart = [];
+    console.log(`Your order number is ${placeholder}`);
+};
+const checkoutChecker: (prompt: string, pattern: string) => Promise<string> = async (prompt: string, pattern: string) => {
+    let input: string = "";
+    while (true) {
+        input = (await askQuestion(prompt)).trim();
+        if (input === "exit") {
+            return "exit";
+        } else if (input.search(pattern) === 0) {
+            return input;
+        } else {
+            console.log(`Bad format: ${input} vs ${pattern}`);
+        }
+    }
+};
 
 // REPLs for the program
-const loggedInRepl = async (username: string) => {
+const loggedInRepl: (username: string) => Promise<void> = async (username: string) => {
     let command: string = "";
     const help: string = `${userHelp}${ownerMode ? ownerHelp : ""}`;
     console.log(help);
     while (command.toLowerCase() !== "exit") {
-        const input = (await askQuestion(`${username}${ownerMode ? "[OWNER]" : ""}> `)).trim().toLowerCase().split(" ");
+        const input: string[] = (await askQuestion(`${username}${ownerMode ? "[OWNER]" : ""}> `)).trim().toLowerCase().split(" ");
         command = input[0];
-        const argv = input.splice(1);
+        const argv: string[] = input.splice(1);
 
         if (command === "help") {
             console.log(help);
@@ -215,7 +346,7 @@ const loggedInRepl = async (username: string) => {
         } else if (command === "turn") {
             await turn(argv);
         } else if (command === "order") {
-            let queryText = `SELECT * FROM orders${ownerMode ? "" : `WHERE username = ${username}`}`;
+            let queryText: string = `SELECT * FROM orders${ownerMode ? "" : `WHERE username = ${username}`}`;
             let dbRes: Postgres.QueryResult;
             if (argv.length === 1) {
                 queryText = `${queryText} ${ownerMode ? "WHERE" : "AND"} id = $1`;
@@ -228,16 +359,18 @@ const loggedInRepl = async (username: string) => {
             console.log(dbRes.rows);
         } else if (command === "cart") {
             userCart = await browseBooks(userCart, true);
+        } else if (command === "checkout") {
+            await checkout();
         }
     }
 };
-const mainRepl = async () => {
+const mainRepl: () => void = async () => {
     let command: string = "";
-    const prompt = `Welcome to this "online" bookstore. You may [search, login, register] or request [help]:\n> `;
+    const prompt: string = `Welcome to this "online" bookstore. You may [search, login, register] or request [help]:\n> `;
     while (command.toLowerCase() !== "exit") {
-        const input = (await askQuestion(command === "turn" ? "> " : prompt)).trim().toLowerCase().split(" ");
+        const input: string[] = (await askQuestion(command === "turn" ? "> " : prompt)).trim().toLowerCase().split(" ");
         command = input[0];
-        const argv = input.splice(1);
+        const argv: string[] = input.splice(1);
 
         if (command === "login") {
             const username = (await askQuestion("What is your username?\n> ")).trim();
@@ -249,6 +382,7 @@ const mainRepl = async () => {
                 const loggedIn = dbRes.rows[0];
                 guestMode = false;
                 ownerMode = loggedIn.admin_account;
+                userCart = [];
                 await loggedInRepl(loggedIn.username);
                 guestMode = true;
                 ownerMode = false;
