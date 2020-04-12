@@ -184,6 +184,7 @@ Book ${bookIndex + 1} of ${books.length}
     return `${baseBookInfo}${ownerMode ? ownerBookInfo : ""}`;
 };
 const browseBooks: (books: Book[], cart: boolean) => Promise<Book[]> = async (books: Book[], inCart: boolean) => {
+    // TODO drop when (ownerMode === true) means "drop from bookstore"
     const cart: Book[] = inCart ? books : [];
     let bookIndex: number = 0;
     let bookInfo: string = books.length !== 0 ? bookInfoTemplate(books, bookIndex) : "No books in your cart.";
@@ -311,6 +312,10 @@ const checkout: () => Promise<void> = async () => {
         }
     }
 
+    // TODO INSERT INTO orders
+    // TODO deduct copies from bookstore
+    // TODO increase bookstore's cash
+    // TODO randomly advance orders (e.g. warehouse -> in china -> at border -> arrived)
     const placeholder: string = "100";
     userCart = [];
     console.log(`Your order number is ${placeholder}`);
@@ -332,6 +337,7 @@ const checkoutChecker: (prompt: string, pattern: string) => Promise<string> = as
 // REPLs for the program
 const loggedInRepl: (username: string) => Promise<void> = async (username: string) => {
     let command: string = "";
+    // TODO good help strings for differnt modes
     const help: string = `${userHelp}${ownerMode ? ownerHelp : ""}`;
     console.log(help);
     while (command.toLowerCase() !== "exit") {
@@ -346,6 +352,7 @@ const loggedInRepl: (username: string) => Promise<void> = async (username: strin
         } else if (command === "turn") {
             await turn(argv);
         } else if (command === "order") {
+            // TODO look at previous orders' statuses
             let queryText: string = `SELECT * FROM orders${ownerMode ? "" : `WHERE username = ${username}`}`;
             let dbRes: Postgres.QueryResult;
             if (argv.length === 1) {
@@ -361,6 +368,15 @@ const loggedInRepl: (username: string) => Promise<void> = async (username: strin
             userCart = await browseBooks(userCart, true);
         } else if (command === "checkout") {
             await checkout();
+        } else if (command === "money" && ownerMode) {
+            // TODO display money
+        } else if (command === "add" && ownerMode) {
+            // TODO add new book to bookstore
+        } else if (command === "publishers" && ownerMode) {
+            // TODO view publishers
+            // TODO automatically "email" publishers when stock of a certain book falls beneath 10
+        } else if (command === "metrics" && ownerMode) {
+            // TODO show metrics (sales vs expenses, sales per genre, sales per author)
         }
     }
 };
@@ -390,6 +406,7 @@ const mainRepl: () => void = async () => {
                 console.error("Sorry, you're not in the database (which means you should make a new user), or the password you entered is not the correct one.");
             }
         } else if (command === "register") {
+            // TODO add contact info on registration
             const existingUsers = (await pgClient.query("SELECT username FROM users")).rows;
             let newUsername = "";
             let usernameExists = true;
