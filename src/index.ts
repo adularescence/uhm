@@ -38,15 +38,7 @@ const searchQueryTypes = {
     price: false,
     publisher: false,
 };
-const contactInfoPatterns: ContactInfo = {
-    address: "^\\d+ [A-Z][a-z]+ [A-Z][a-z]+$",
-    city: "^[A-Za-z\\-]+$",
-    firstName: "^[A-Za-z]+$",
-    lastName: "^[A-Za-z]+$",
-    phone: "^\\d{3}-\\d{3}-\\d{4}$",
-    postalCode: "^[A-Z]\\d[A-Z] \\d[A-Z]\\d$",
-};
-const billingInfoPatterns: BillingInfo = {
+const infoValidator: BillingInfo = {
     address: "^\\d+ [A-Z][a-z]+ [A-Z][a-z]+$",
     cardNumber: "^\\d{16}$",
     city: "^[A-Za-z\\-]+$",
@@ -108,6 +100,7 @@ const scanner: readline.Interface = readline.createInterface({
     terminal: false
 });
 
+let currentUser: string = "";
 let guestMode: boolean = true;
 let ownerMode: boolean = false;
 let userCart: Book[] = [];
@@ -237,7 +230,7 @@ const browseBooks: (books: Book[], cart: boolean) => Promise<Book[]> = async (bo
     return cart;
 };
 const checkout: () => Promise<void> = async () => {
-    const contactInfo: ContactInfo = {
+    let shippingInfo: ContactInfo = {
         address: "",
         city: "",
         firstName: "",
@@ -245,7 +238,7 @@ const checkout: () => Promise<void> = async () => {
         phone: "",
         postalCode: ""
     };
-    const billingInfo: BillingInfo = {
+    let billingInfo: BillingInfo = {
         address: "",
         cardNumber: "",
         city: "",
@@ -256,59 +249,44 @@ const checkout: () => Promise<void> = async () => {
         phone: "",
         postalCode: ""
     };
-    let nevermind: boolean = false;
 
     console.log(`Beginning the checkout process. Follow the prompts, and type "exit" to exit at anytime.`);
-    await asyncForEach(Object.keys(contactInfo), async (target: string) => {
-        if (nevermind) {
-            return;
-        }
-        const response: string = await checkoutChecker(`What is your ${target}?\n`, contactInfoPatterns[`${target}`]);
-        if (response === "exit") {
-            nevermind = true;
-        } else {
-            contactInfo[`${target}`] = response;
-        }
-    });
-    if (nevermind) {
-        return;
-    }
-
-    const sameAsContact: string = (await askQuestion(`Is your billing info the same as your contact info (yes, no)?`)).trim().toLowerCase();
-    if (sameAsContact === "no") {
-        await asyncForEach(Object.keys(billingInfo), async (target: string) => {
-            if (nevermind) {
-                return;
-            }
-            const response: string = await checkoutChecker(`What is your ${target}?\n`, billingInfoPatterns[`${target}`]);
-            if (response === "exit") {
-                nevermind = true;
-            } else {
-                billingInfo[`${target}`] = response;
-            }
-        });
-        if (nevermind) {
-            return;
-        }
-    } else if (sameAsContact === "exit") {
+    let gotInfo: any;
+    let sameInfo: string = (await askQuestion(`Is your shipping info the same as your contact info (yes, no)?\n`)).trim().toLowerCase();
+    if (sameInfo === "yes") {
+        // TODO copy user's contact info over
+    } else if (sameInfo === "exit") {
         return;
     } else {
-        Object.keys(contactInfo).forEach((key: string) => {
-            billingInfo[`${key}`] = contactInfo[`${key}`];
-        });
-        await asyncForEach(["cardNumber", "cvv", "expiryDate"], async (target: string) => {
-            if (nevermind) {
-                return;
-            }
-            const response = await checkoutChecker(`What is your ${target}?\n`, billingInfoPatterns[`${target}`]);
-            if (response === "exit") {
-                nevermind = true;
-            } else {
-                billingInfo[`${target}`] = response;
-            }
-        });
-        if (nevermind) {
+        // else assume "no"
+        gotInfo = await getInfo(shippingInfo, Object.keys(shippingInfo), true);
+        if (gotInfo === "exit") {
             return;
+        } else {
+            shippingInfo = gotInfo;
+        }
+    }
+
+    sameInfo = (await askQuestion(`Is your billing info the same as your contact/shipping info (contact/shipping/neither)?\n`)).trim().toLowerCase();
+    if (sameInfo === "contact") {
+        // TODO copy user's contact info over
+    } else if (sameInfo === "shipping") {
+        Object.keys(shippingInfo).forEach((key: string) => {
+            billingInfo[`${key}`] = shippingInfo[`${key}`];
+        });
+        gotInfo = await getInfo(billingInfo, ["cardNumber", "cvv", "expiryDate"], true);
+        if (gotInfo === "exit") {
+            return;
+        } else {
+            billingInfo = gotInfo;
+        }
+    } else {
+        // else assume "neither"
+        gotInfo = await getInfo(billingInfo, Object.keys(billingInfo), true);
+        if (gotInfo === "exit") {
+            return;
+        } else {
+            billingInfo = gotInfo;
         }
     }
 
@@ -333,15 +311,39 @@ const checkoutChecker: (prompt: string, pattern: string) => Promise<string> = as
         }
     }
 };
+const getInfo: (info: any, targets: string[], cancellable: boolean) => any = async (info: any, targets: string[], cancellable: boolean) => {
+    let nevermind: boolean = false;
+    let correctInfo: boolean = false;
+    while (!correctInfo) {
+        await asyncForEach(targets, async (target: string) => {
+            if (nevermind) {
+                return;
+            }
+            const response: string = await checkoutChecker(`What is your ${target}?\n`, infoValidator[`${target}`]);
+            if (response === "exit" && cancellable) {
+                nevermind = true;
+            } else {
+                info[`${target}`] = response;
+            }
+        });
+
+        targets.forEach((target) => {
+            const field = `Your ${target} is:`;
+            console.log(`${field}${field.length < 16 ? "\t\t\t" : "\t\t"}${info[`${target}`]}`);
+        });
+        correctInfo = (await askQuestion("Are these fields correct (yes, no)\n?")).trim().toLowerCase() === "yes";
+    }
+    return info;
+};
 
 // REPLs for the program
-const loggedInRepl: (username: string) => Promise<void> = async (username: string) => {
+const loggedInRepl: () => Promise<void> = async () => {
     let command: string = "";
     // TODO good help strings for differnt modes
     const help: string = `${userHelp}${ownerMode ? ownerHelp : ""}`;
     console.log(help);
     while (command.toLowerCase() !== "exit") {
-        const input: string[] = (await askQuestion(`${username}${ownerMode ? "[OWNER]" : ""}> `)).trim().toLowerCase().split(" ");
+        const input: string[] = (await askQuestion(`${currentUser}${ownerMode ? "[OWNER]" : ""}> `)).trim().toLowerCase().split(" ");
         command = input[0];
         const argv: string[] = input.splice(1);
 
@@ -353,7 +355,7 @@ const loggedInRepl: (username: string) => Promise<void> = async (username: strin
             await turn(argv);
         } else if (command === "order") {
             // TODO look at previous orders' statuses
-            let queryText: string = `SELECT * FROM orders${ownerMode ? "" : `WHERE username = ${username}`}`;
+            let queryText: string = `SELECT * FROM orders${ownerMode ? "" : `WHERE username = ${currentUser}`}`;
             let dbRes: Postgres.QueryResult;
             if (argv.length === 1) {
                 queryText = `${queryText} ${ownerMode ? "WHERE" : "AND"} id = $1`;
@@ -399,14 +401,14 @@ const mainRepl: () => void = async () => {
                 guestMode = false;
                 ownerMode = loggedIn.admin_account;
                 userCart = [];
-                await loggedInRepl(loggedIn.username);
+                currentUser = loggedIn.username;
+                await loggedInRepl();
                 guestMode = true;
                 ownerMode = false;
             } else {
                 console.error("Sorry, you're not in the database (which means you should make a new user), or the password you entered is not the correct one.");
             }
         } else if (command === "register") {
-            // TODO add contact info on registration
             const existingUsers = (await pgClient.query("SELECT username FROM users")).rows;
             let newUsername = "";
             let usernameExists = true;
@@ -423,8 +425,22 @@ const mainRepl: () => void = async () => {
             const password = (await askQuestion("What would you like your new password to be?\n> ")).trim();
             const accept = (await askQuestion(`Your username shall be '${newUsername} and your password shall be ${password}, is this okay (Y/n)?\n> `)).trim();
             if (accept.toLowerCase() === "y" || accept.toLowerCase() === "yes" || accept === "") {
-                await pgClient.query("INSERT INTO users (username, not_salty_password, admin_account) VALUES ($1, $2, $3)", [newUsername, password, false]);
+                console.log("We will also need your contact info.");
+                let contactInfo: ContactInfo = {
+                    address: "",
+                    city: "",
+                    firstName: "",
+                    lastName: "",
+                    phone: "",
+                    postalCode: ""
+                };
+                contactInfo = await getInfo(contactInfo, Object.keys(contactInfo), false);
+
+                // await pgClient.query("INSERT INTO users (username, not_salty_password, admin_account) VALUES ($1, $2, $3)", [newUsername, password, false]);
+                // TODO insert this contact info into DB
                 console.log("A new user has been added to the database.\n");
+            } else {
+                console.log("Cancelled registration.");
             }
         } else if (command === "search") {
             await search();
