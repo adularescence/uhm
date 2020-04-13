@@ -14,6 +14,13 @@ declare interface Book {
     publisher: string;
     royalty: number;
 }
+declare interface Publisher {
+    banking_account: number;
+    email: string;
+    phone_number: string;
+    publisher_address: string;
+    publisher_name: string;
+}
 declare interface ContactInfo {
     address: string;
     city: string;
@@ -40,27 +47,36 @@ const searchQueryTypes = {
     price: false,
     publisher: false,
 };
-const infoValidator: BillingInfo = {
-    address: "^\\d+ [A-Z][a-z]+ [A-Z][a-z]+$",
-    cardNumber: "^\\d{16}$",
-    city: "^[A-Za-z\\-]+$",
-    cvv: "^\\d{3}$",
-    expiryDate: "^\\d{2}/\\d{2}$",
-    firstName: "^[A-Za-z]+$",
-    lastName: "^[A-Za-z]+$",
-    phone: "^\\d{3}-\\d{3}-\\d{4}$",
-    postalCode: "^[A-Z]\\d[A-Z] \\d[A-Z]\\d$",
-};
-const bookValidator = {
-    author_name: "^.+$",
-    book_name: "^.+$",
-    count: "^\\d+$",
-    genre: "^.+$",
-    isbn: "^\\d{3}-\\d{10}$",
-    pages: "^\\d+$",
-    price: "^\\d+\\.\\d{2}$",
-    publisher: "^.+$",
-    royalty: "^\\d\.\\d{2}$",
+const validators = {
+    book: {
+        author_name: "^.+$",
+        book_name: "^.+$",
+        count: "^\\d+$",
+        genre: "^.+$",
+        isbn: "^\\d{3}-\\d{10}$",
+        pages: "^\\d+$",
+        price: "^\\d+\\.\\d{2}$",
+        publisher: "^.+$",
+        royalty: "^\\d\.\\d{2}$",
+    },
+    info: {
+        address: "^\\d+ [A-Z][a-z]+ [A-Z][a-z]+$",
+        cardNumber: "^\\d{16}$",
+        city: "^[A-Za-z\\-]+$",
+        cvv: "^\\d{3}$",
+        expiryDate: "^\\d{2}/\\d{2}$",
+        firstName: "^[A-Za-z]+$",
+        lastName: "^[A-Za-z]+$",
+        phone: "^\\d{3}-\\d{3}-\\d{4}$",
+        postalCode: "^[A-Z]\\d[A-Z] \\d[A-Z]\\d$",
+    },
+    publisher: {
+        banking_account: "^\\d+$",
+        email: "^.+@.+\\..+$",
+        phone_number: "^\\d{3}-\\d{3}-\\d{4}$",
+        publisher_address: "^\\d+ [A-Z][a-z]+ [A-Z][a-z]+$",
+        publisher_name: "^.+$"
+    },
 };
 
 const searchHelp: string = `
@@ -291,7 +307,7 @@ const checkout: () => Promise<void> = async () => {
         return;
     } else {
         // else assume "no"
-        gotInfo = await getInfo(shippingInfo, Object.keys(shippingInfo), true, false);
+        gotInfo = await getInfo(shippingInfo, Object.keys(shippingInfo), true, "info");
         if (gotInfo === "exit") {
             return;
         } else {
@@ -306,7 +322,7 @@ const checkout: () => Promise<void> = async () => {
         Object.keys(shippingInfo).forEach((key: string) => {
             billingInfo[`${key}`] = shippingInfo[`${key}`];
         });
-        gotInfo = await getInfo(billingInfo, ["cardNumber", "cvv", "expiryDate"], true, false);
+        gotInfo = await getInfo(billingInfo, ["cardNumber", "cvv", "expiryDate"], true, "info");
         if (gotInfo === "exit") {
             return;
         } else {
@@ -314,7 +330,7 @@ const checkout: () => Promise<void> = async () => {
         }
     } else {
         // else assume "neither"
-        gotInfo = await getInfo(billingInfo, Object.keys(billingInfo), true, false);
+        gotInfo = await getInfo(billingInfo, Object.keys(billingInfo), true, "info");
         if (gotInfo === "exit") {
             return;
         } else {
@@ -343,7 +359,7 @@ const checkoutChecker: (prompt: string, pattern: string) => Promise<string> = as
         }
     }
 };
-const getInfo: (info: any, targets: string[], cancellable: boolean, newBook: boolean) => any = async (info: any, targets: string[], cancellable: boolean, newBook: boolean) => {
+const getInfo: (info: any, targets: string[], cancellable: boolean, validator: string) => any = async (info: any, targets: string[], cancellable: boolean, validator: string) => {
     let nevermind: boolean = false;
     let correctInfo: boolean = false;
     while (!correctInfo) {
@@ -351,7 +367,7 @@ const getInfo: (info: any, targets: string[], cancellable: boolean, newBook: boo
             if (nevermind) {
                 return;
             }
-            const response: string = await checkoutChecker(`What is ${newBook ? "the" : "your"} ${target}?\n`, newBook ? bookValidator[`${target}`] : infoValidator[`${target}`]);
+            const response: string = await checkoutChecker(`What is the ${target}?\n`, validators[`${validator}`][`${target}`]);
             if (response === "exit" && cancellable) {
                 nevermind = true;
             } else {
@@ -367,8 +383,8 @@ const getInfo: (info: any, targets: string[], cancellable: boolean, newBook: boo
     }
     return info;
 };
-const publisherInfoTemplate: (publishers: any[], publisherIndex: number) => string = (publishers: any[], publisherIndex: number) => {
-    const publisher: any = publishers[publisherIndex];
+const publisherInfoTemplate: (publishers: Publisher[], publisherIndex: number) => string = (publishers: Publisher[], publisherIndex: number) => {
+    const publisher: Publisher = publishers[publisherIndex];
     return `Publisher ${publisherIndex + 1} of ${publishers.length}
 
     Name:\t\t${publisher.publisher_name}
@@ -429,7 +445,7 @@ const loggedInRepl: () => Promise<void> = async () => {
             };
             console.clear();
             console.log(`Beginning the addition of a new book process. Follow the prompts, and type "exit" to exit anytime.\n`);
-            const gotInfo: any = await getInfo(newBook, Object.keys(newBook), true, true);
+            let gotInfo: any = await getInfo(newBook, Object.keys(newBook), true, "book");
             if (gotInfo !== "exit") {
                 // TODO check if have enough cash on hand to order $count copies of new
                 const values: any = Object.keys(gotInfo).map((key: string) => {
@@ -441,8 +457,29 @@ const loggedInRepl: () => Promise<void> = async () => {
                         return gotInfo[`${key}`];
                     }
                 });
-                await pgClient.query(`INSERT INTO book VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, values);
-                console.log(`Added "${newBook.book_name}" to the bookstore.`);
+                let publisherExists: boolean = (await pgClient.query(`SELECT EXISTS (SELECT * FROM publisher WHERE publisher_name = '${gotInfo.publisher}')`)).rows[0].exists;
+                if (!publisherExists) {
+                    const newPublisher: Publisher = {
+                        banking_account: -1,
+                        email: "",
+                        phone_number: "",
+                        publisher_address: "",
+                        publisher_name: gotInfo.publisher,
+                    };
+                    console.log("Seems like this book has a new publisher. You should add information for this publisher for the purpose of paying royalties, buying new copies of books, etc.");
+                    gotInfo = await getInfo(newPublisher, ["banking_account", "email", "phone_number", "publisher_address"], false, "publisher");
+                    if (gotInfo !== "exit") {
+                        gotInfo.banking_account = parseInt(gotInfo.banking_account, 10);
+                        gotInfo.publisher_name = newPublisher.publisher_name;
+                        await pgClient.query(`INSERT INTO publisher VALUES ($1, $2, $3, $4, $5)`, Object.values(gotInfo));
+                        publisherExists = true;
+                        console.log(`Added "${newPublisher.publisher_name}" to the list of publishers.`);
+                    }
+                }
+                if (publisherExists) {
+                    await pgClient.query(`INSERT INTO book VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, values);
+                    console.log(`Added "${newBook.book_name}" to the bookstore.`);
+                }
             }
         } else if (command === "publisher" && ownerMode) {
             let queryText: string = `SELECT * FROM publisher`;
@@ -547,7 +584,7 @@ const mainRepl: () => void = async () => {
                     phone: "",
                     postalCode: ""
                 };
-                contactInfo = await getInfo(contactInfo, Object.keys(contactInfo), false, false);
+                contactInfo = await getInfo(contactInfo, Object.keys(contactInfo), false, "info");
 
                 // await pgClient.query("INSERT INTO users (username, not_salty_password, admin_account) VALUES ($1, $2, $3)", [newUsername, password, false]);
                 // TODO insert this contact info into DB

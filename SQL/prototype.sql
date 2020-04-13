@@ -1,21 +1,10 @@
 /* remove tables */
+DROP TABLE book;
 DROP TABLE accounting;
 DROP TABLE orders;
 DROP TABLE publisher;
 DROP TABLE users;
-DROP TABLE book;
 
-CREATE TABLE book(
-    author_name TEXT NOT NULL,
-    book_name TEXT NOT NULL,
-    count INT NOT NULL,
-    genre TEXT NOT NULL,
-    isbn TEXT PRIMARY KEY,
-    pages INT NOT NULL,
-    price MONEY NOT NULL,
-    publisher TEXT NOT NULL,
-    royalty NUMERIC (3, 2) NOT NULL
-);
 
 CREATE TABLE users(
     username TEXT PRIMARY KEY,
@@ -24,11 +13,11 @@ CREATE TABLE users(
 );
 
 CREATE TABLE publisher(
-    publisher_name TEXT PRIMARY KEY,
-    publisher_address TEXT NOT NULL,
+    banking_account INT NOT NULL,
     email TEXT NOT NULL,
     phone_number TEXT NOT NULL,
-    banking_account INT NOT NULL
+    publisher_address TEXT NOT NULL,
+    publisher_name TEXT PRIMARY KEY
 );
 
 CREATE TABLE orders(
@@ -41,6 +30,53 @@ CREATE TABLE orders(
 
 CREATE TABLE accounting(
     cash MONEY PRIMARY KEY
+);
+
+CREATE TABLE book(
+    author_name TEXT NOT NULL,
+    book_name TEXT NOT NULL,
+    count INT NOT NULL,
+    genre TEXT NOT NULL,
+    isbn TEXT PRIMARY KEY,
+    pages INT NOT NULL,
+    price MONEY NOT NULL,
+    publisher TEXT REFERENCES publisher,
+    royalty NUMERIC (3, 2) NOT NULL
+);
+
+/* bogus users */
+INSERT INTO users (username, not_salty_password, admin_account) VALUES (
+    'kvn',
+    'asdfjkl;',
+    'false'
+);
+INSERT INTO users (username, not_salty_password, admin_account) VALUES (
+    'kevin',
+    'asdfjkl;',
+    'true'
+);
+
+/* bogus publishers */
+INSERT INTO publisher VALUES (
+    1,
+    'support@darkhorsebooks.ca',
+    '416-123-4567',
+    '669 Cassells Street',
+    'Dark Horse Books'
+);
+INSERT INTO publisher VALUES (
+    2,
+    'placeholder@gmail.com',
+    '123-456-7890',
+    '123 Placeholder Street',
+    'Brooks Cole'
+);
+INSERT INTO publisher VALUES (
+    3,
+    'placeholder@outlook.com',
+    '098-765-4321',
+    '456 Placeholder Street',
+    'Viz Media'
 );
 
 /* bogus books */
@@ -82,44 +118,9 @@ INSERT INTO book VALUES (
     'NieR:Automata: Short Story Long',
     1,
     'Video Game',
-
+    '978-1974701841',
     256,
     19.69,
     'Viz Media',
     0.10
-);
-
-/* bogus users */
-INSERT INTO users (username, not_salty_password, admin_account) VALUES (
-    'kvn',
-    'asdfjkl;',
-    'false'
-);
-INSERT INTO users (username, not_salty_password, admin_account) VALUES (
-    'kevin',
-    'asdfjkl;',
-    'true'
-);
-
-/* bogus publishers */
-INSERT INTO publisher (publisher_name, publisher_address, email, phone_number, banking_account) VALUES (
-    'Dark Horse Books',
-    '669 Cassells Street',
-    'support@darkhorsebooks.ca',
-    '416-123-4567',
-    1
-);
-INSERT INTO publisher (publisher_name, publisher_address, email, phone_number, banking_account) VALUES (
-    'Brooks Cole',
-    '123 Placeholder Street',
-    'placeholder@gmail.com',
-    '123-456-7890',
-    2
-);
-INSERT INTO publisher (publisher_name, publisher_address, email, phone_number, banking_account) VALUES (
-    'Viz Media',
-    '456 Placeholder Street',
-    'placeholder@outlook.com',
-    '098-765-4321',
-    3
 );
