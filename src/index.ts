@@ -425,7 +425,7 @@ const loggedInRepl: () => Promise<void> = async () => {
                 dbRes = await pgClient.query(queryText);
             }
             console.log(dbRes.rows);
-        } else if (command === "cart" !ownerMode) {
+        } else if (command === "cart" && !ownerMode) {
             userCart = await browseBooks(userCart, true);
         } else if (command === "checkout") {
             await checkout();
