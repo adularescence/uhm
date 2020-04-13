@@ -10,8 +10,8 @@ declare interface Book {
     genre: string;
     isbn: string;
     pages: number;
-    publisher: string;
     price: number;
+    publisher: string;
     royalty: number;
 }
 declare interface ContactInfo {
@@ -48,6 +48,17 @@ const infoValidator: BillingInfo = {
     lastName: "^[A-Za-z]+$",
     phone: "^\\d{3}-\\d{3}-\\d{4}$",
     postalCode: "^[A-Z]\\d[A-Z] \\d[A-Z]\\d$",
+};
+const bookValidator = {
+    author_name: "^.+$",
+    book_name: "^.+$",
+    count: "^\\d+$",
+    genre: "^.+$",
+    isbn: "^\\d{3}-\\d{10}$",
+    pages: "^\\d+$",
+    price: "^\\d+\\.\\d{2}$",
+    publisher: "^.+$",
+    royalty: "^\\d\.\\d{2}$",
 };
 
 const searchHelp: string = `
@@ -105,7 +116,7 @@ let guestMode: boolean = true;
 let ownerMode: boolean = false;
 let userCart: Book[] = [];
 
-// Helper Functions
+// Useful Functions
 const askQuestion: (query: string) => Promise<string> = (query: string) => {
     return new Promise<string>((resolve) => {
         scanner.question(query, resolve);
@@ -135,12 +146,12 @@ const search: () => Promise<void> = async () => {
     }
 
     console.log(queryText); // debug
-    const dbRes = await pgClient.query(queryText);
-    const books = dbRes.rows;
+    const dbRes: Postgres.QueryResult = await pgClient.query(queryText);
+    const books: Book[] = dbRes.rows;
     if (books.length === 0) {
         console.log("No books with specified search options found.");
     } else {
-        const newCart = await browseBooks(books, false);
+        const newCart: Book[] = await browseBooks(books, false);
         if (!guestMode) {
             userCart = newCart;
         }
@@ -177,17 +188,19 @@ Book ${bookIndex + 1} of ${books.length}
     return `${baseBookInfo}${ownerMode ? ownerBookInfo : ""}`;
 };
 const browseBooks: (books: Book[], cart: boolean) => Promise<Book[]> = async (books: Book[], inCart: boolean) => {
-    // TODO drop when (ownerMode === true) means "drop from bookstore"
-    const cart: Book[] = inCart ? books : [];
+    const cart: Book[] = (inCart || ownerMode) ? books : [];
     let bookIndex: number = 0;
     let bookInfo: string = books.length !== 0 ? bookInfoTemplate(books, bookIndex) : "No books in your cart.";
     let browsingCommand: string = "";
     while (browsingCommand !== "exit") {
         console.clear();
+        const prompt: string = `Viewing the ${ownerMode ? "books in the bookstore" : (inCart ? "books in your cart" : "found books")}.
+        "next" or "prev" for next/previous book.\
+${ownerMode ? `\n\t"add" to add a new book to the bookstore.` : ((guestMode || inCart) ? "" : `\n\t"add" to add current book to cart.`)}\
+${ownerMode ? `\n\t"drop" to remove current book from the bookstore.` : (inCart ? `\n\t"drop" to remove current book from cart.` : "")}
+        "exit" to exit.\n${bookInfo}\n`;
 
-        browsingCommand = (await askQuestion(`Viewing the ${inCart ? "books in your cart." : "found books"}.
-"next" or "prev" for next/previous book.${(guestMode || ownerMode || inCart) ? "" : `\n"add" to add current book to cart.`}${inCart ? `\n"drop" to remove current book from cart.` : ""}
-"exit" to exit.\n${bookInfo}\n`)).trim().toLowerCase();
+        browsingCommand = (await askQuestion(prompt)).trim().toLowerCase();
         if (browsingCommand === "next" && (inCart ? cart.length !== 0 : books.length !== 0)) {
             if (bookIndex < (inCart ? cart.length - 1 : books.length - 1)) {
                 bookIndex++;
@@ -202,29 +215,77 @@ const browseBooks: (books: Book[], cart: boolean) => Promise<Book[]> = async (bo
             } else if (bookInfo[bookInfo.length - 1] !== "!") {
                 bookInfo += "\nNo previous book!";
             }
-        } else if (browsingCommand === "add" && !(guestMode || ownerMode || inCart)) {
-            const addToCart = books.splice(bookIndex, 1)[0];
-            if (bookIndex === books.length) {
-                bookIndex--;
+        } else if (browsingCommand === "add") {
+            if (ownerMode) {
+                const newBook: Book = {
+                    author_name: "",
+                    book_name: "",
+                    count: -1,
+                    genre: "",
+                    isbn: "",
+                    pages: -1,
+                    price: 0,
+                    publisher: "",
+                    royalty: 0,
+                };
+                console.clear();
+                console.log(`Beginning the addition of a new book process. Follow the prompts, and type "exit" to exit anytime.\n`);
+                const gotInfo: any = await getInfo(newBook, Object.keys(newBook), true, true);
+                if (gotInfo !== "exit") {
+                    // TODO check if have enough cash on hand to order $count copies of new
+                    const values: any = Object.keys(gotInfo).map((key: string) => {
+                        if (key === "count" || key === "pages") {
+                            return parseInt(gotInfo[`${key}`], 10);
+                        } else if (key === "price" || key === "royalty") {
+                            return parseFloat(gotInfo[`${key}`]);
+                        } else {
+                            return gotInfo[`${key}`];
+                        }
+                    });
+                    await pgClient.query(`INSERT INTO book VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, values);
+                    bookInfo = `${bookInfoTemplate(cart, bookIndex)}\nAdded "${newBook.book_name}" to the bookstore.`;
+                }
+            } else if (!(guestMode || inCart)) {
+                const addToCart = books.splice(bookIndex, 1)[0];
+                if (bookIndex === books.length) {
+                    bookIndex--;
+                }
+                cart.push(addToCart);
+                if (books.length !== 0) {
+                    bookInfo = bookInfoTemplate(books, bookIndex);
+                } else {
+                    bookInfo = `No more books.`;
+                }
+                bookInfo += `\nAdded "${addToCart.book_name}" to cart.`;
             }
-            cart.push(addToCart);
-            if (books.length !== 0) {
-                bookInfo = bookInfoTemplate(books, bookIndex);
-            } else {
-                bookInfo = `No more books.`;
+        } else if (browsingCommand === "drop") {
+            if (inCart && cart.length !== 0) {
+                const dropFromCart = cart.splice(bookIndex, 1)[0];
+                if (bookIndex === cart.length) {
+                    bookIndex--;
+                }
+                if (cart.length !== 0) {
+                    bookInfo = bookInfoTemplate(cart, bookIndex);
+                } else {
+                    bookInfo = `No more books in your cart.`;
+                }
+                bookInfo += `\nDropped "${dropFromCart.book_name}" from your cart.`;
+            } else if (ownerMode) {
+                const confirm: boolean = (await askQuestion("Really remove this book from the bookstore (yes, no)?\n")).trim().toLowerCase() === "yes";
+                if (confirm) {
+                    const bookToDelete: Book = cart.splice(bookIndex, 1)[0];
+                    if (bookIndex === cart.length) {
+                        bookIndex--;
+                    }
+                    if (cart.length !== 0) {
+                        bookInfo = bookInfoTemplate(cart, bookIndex);
+                    } else {
+                        bookInfo = `No more books from your search.`;
+                    }
+                    const dbRes: Postgres.QueryResult = await pgClient.query(`DELETE FROM book WHERE isbn = '${bookToDelete.isbn}'`);
+                    bookInfo += `\nDeleted "${bookToDelete.book_name}" from the bookstore.`;
+                }
             }
-            bookInfo += `\nAdded ${addToCart.book_name} to cart.`;
-        } else if (browsingCommand === "drop" && inCart && cart.length !== 0) {
-            const dropFromCart = cart.splice(bookIndex, 1)[0];
-            if (bookIndex === cart.length) {
-                bookIndex--;
-            }
-            if (cart.length !== 0) {
-                bookInfo = bookInfoTemplate(cart, bookIndex);
-            } else {
-                bookInfo = `No more books in your cart.`;
-            }
-            bookInfo += `\nDropped ${dropFromCart.book_name} from your cart.`;
         }
     }
     return cart;
@@ -250,7 +311,7 @@ const checkout: () => Promise<void> = async () => {
         postalCode: ""
     };
 
-    console.log(`Beginning the checkout process. Follow the prompts, and type "exit" to exit at anytime.`);
+    console.log(`Beginning the checkout process. Follow the prompts, and type "exit" to exit anytime.`);
     let gotInfo: any;
     let sameInfo: string = (await askQuestion(`Is your shipping info the same as your contact info (yes, no)?\n`)).trim().toLowerCase();
     if (sameInfo === "yes") {
@@ -259,7 +320,7 @@ const checkout: () => Promise<void> = async () => {
         return;
     } else {
         // else assume "no"
-        gotInfo = await getInfo(shippingInfo, Object.keys(shippingInfo), true);
+        gotInfo = await getInfo(shippingInfo, Object.keys(shippingInfo), true, false);
         if (gotInfo === "exit") {
             return;
         } else {
@@ -274,7 +335,7 @@ const checkout: () => Promise<void> = async () => {
         Object.keys(shippingInfo).forEach((key: string) => {
             billingInfo[`${key}`] = shippingInfo[`${key}`];
         });
-        gotInfo = await getInfo(billingInfo, ["cardNumber", "cvv", "expiryDate"], true);
+        gotInfo = await getInfo(billingInfo, ["cardNumber", "cvv", "expiryDate"], true, false);
         if (gotInfo === "exit") {
             return;
         } else {
@@ -282,7 +343,7 @@ const checkout: () => Promise<void> = async () => {
         }
     } else {
         // else assume "neither"
-        gotInfo = await getInfo(billingInfo, Object.keys(billingInfo), true);
+        gotInfo = await getInfo(billingInfo, Object.keys(billingInfo), true, false);
         if (gotInfo === "exit") {
             return;
         } else {
@@ -311,7 +372,7 @@ const checkoutChecker: (prompt: string, pattern: string) => Promise<string> = as
         }
     }
 };
-const getInfo: (info: any, targets: string[], cancellable: boolean) => any = async (info: any, targets: string[], cancellable: boolean) => {
+const getInfo: (info: any, targets: string[], cancellable: boolean, newBook: boolean) => any = async (info: any, targets: string[], cancellable: boolean, newBook: boolean) => {
     let nevermind: boolean = false;
     let correctInfo: boolean = false;
     while (!correctInfo) {
@@ -319,7 +380,7 @@ const getInfo: (info: any, targets: string[], cancellable: boolean) => any = asy
             if (nevermind) {
                 return;
             }
-            const response: string = await checkoutChecker(`What is your ${target}?\n`, infoValidator[`${target}`]);
+            const response: string = await checkoutChecker(`What is ${newBook ? "the" : "your"} ${target}?\n`, newBook ? bookValidator[`${target}`] : infoValidator[`${target}`]);
             if (response === "exit" && cancellable) {
                 nevermind = true;
             } else {
@@ -331,7 +392,7 @@ const getInfo: (info: any, targets: string[], cancellable: boolean) => any = asy
             const field = `Your ${target} is:`;
             console.log(`${field}${field.length < 16 ? "\t\t\t" : "\t\t"}${info[`${target}`]}`);
         });
-        correctInfo = (await askQuestion("Are these fields correct (yes, no)\n?")).trim().toLowerCase() === "yes";
+        correctInfo = (await askQuestion("Are these fields correct (yes, no)?\n")).trim().toLowerCase() === "yes";
     }
     return info;
 };
@@ -434,7 +495,7 @@ const mainRepl: () => void = async () => {
                     phone: "",
                     postalCode: ""
                 };
-                contactInfo = await getInfo(contactInfo, Object.keys(contactInfo), false);
+                contactInfo = await getInfo(contactInfo, Object.keys(contactInfo), false, false);
 
                 // await pgClient.query("INSERT INTO users (username, not_salty_password, admin_account) VALUES ($1, $2, $3)", [newUsername, password, false]);
                 // TODO insert this contact info into DB

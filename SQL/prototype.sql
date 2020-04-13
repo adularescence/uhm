@@ -1,13 +1,13 @@
 CREATE TABLE book(
-    isbn TEXT PRIMARY KEY,
-    book_name TEXT NOT NULL,
     author_name TEXT NOT NULL,
+    book_name TEXT NOT NULL,
+    count INT NOT NULL,
     genre TEXT NOT NULL,
-    publisher TEXT NOT NULL,
+    isbn TEXT PRIMARY KEY,
     pages INT NOT NULL,
     price MONEY NOT NULL,
-    royalty NUMERIC (3, 2) NOT NULL,
-    count INT NOT NULL
+    publisher TEXT NOT NULL,
+    royalty NUMERIC (3, 2) NOT NULL
 );
 
 CREATE TABLE users(
@@ -38,48 +38,48 @@ CREATE TABLE accounting(
 
 /* bogus books */
 INSERT INTO book VALUES (
-    '978-1506710310',
-    'NieR: Automata World Guide Volume 1',
     'Square Enix',
+    'NieR: Automata World Guide Volume 1',
+    1,
     'Video Game',
-    'Dark Horse Books',
+    '978-1506710310',
     192,
     43.43,
-    0.10,
-    1
+    'Dark Horse Books',
+    0.10
 );
 INSERT INTO book VALUES (
-    '978-1285741550',
-    'Calculus: Early Transcendentals',
     'James Stewart',
+    'Calculus: Early Transcendentals',
+    1,
     'Textbook',
-    'Brooks Cole',
+    '978-1285741550',
     1368,
     189.57,
-    0.10,
-    1
+    'Brooks Cole',
+    0.10
 );
 INSERT INTO book VALUES (
-    '978-1974701629',
+    'Yoko Taro',
     'NieR:Automata: Long Story Short',
-    'Yoko Taro',
+    1,
     'Video Game',
-    'Viz Media',
+    '978-1974701629',
     256,
     19.69,
-    0.10,
-    1
+    'Viz Media',
+    0.10
 );
 INSERT INTO book VALUES (
-    '978-1974701841',
-    'NieR:Automata: Short Story Long',
     'Yoko Taro',
+    'NieR:Automata: Short Story Long',
+    1,
     'Video Game',
-    'Viz Media',
+    '978-1974701841',
     256,
     19.69,
-    0.10,
-    1
+    'Viz Media',
+    0.10
 );
 
 /* bogus users */
@@ -87,6 +87,11 @@ INSERT INTO users (username, not_salty_password, admin_account) VALUES (
     'kvn',
     'asdfjkl;',
     'false'
+);
+INSERT INTO users (username, not_salty_password, admin_account) VALUES (
+    'kevin',
+    'asdfjkl;',
+    'true'
 );
 
 /* remove tables */
