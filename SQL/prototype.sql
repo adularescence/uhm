@@ -27,7 +27,7 @@ CREATE TABLE publisher(
     publisher_name TEXT PRIMARY KEY,
     publisher_address TEXT NOT NULL,
     email TEXT NOT NULL,
-    phone_number INT NOT NULL,
+    phone_number TEXT NOT NULL,
     banking_account INT NOT NULL
 );
 
@@ -99,4 +99,27 @@ INSERT INTO users (username, not_salty_password, admin_account) VALUES (
     'kevin',
     'asdfjkl;',
     'true'
+);
+
+/* bogus publishers */
+INSERT INTO publisher (publisher_name, publisher_address, email, phone_number, banking_account) VALUES (
+    'Dark Horse Books',
+    '669 Cassells Street',
+    'support@darkhorsebooks.ca',
+    '416-123-4567',
+    1
+);
+INSERT INTO publisher (publisher_name, publisher_address, email, phone_number, banking_account) VALUES (
+    'Brooks Cole',
+    '123 Placeholder Street',
+    'placeholder@gmail.com',
+    '123-456-7890',
+    2
+);
+INSERT INTO publisher (publisher_name, publisher_address, email, phone_number, banking_account) VALUES (
+    'Viz Media',
+    '456 Placeholder Street',
+    'placeholder@outlook.com',
+    '098-765-4321',
+    3
 );
