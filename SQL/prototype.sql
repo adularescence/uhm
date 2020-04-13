@@ -1,3 +1,10 @@
+/* remove tables */
+DROP TABLE accounting;
+DROP TABLE orders;
+DROP TABLE publisher;
+DROP TABLE users;
+DROP TABLE book;
+
 CREATE TABLE book(
     author_name TEXT NOT NULL,
     book_name TEXT NOT NULL,
@@ -75,7 +82,7 @@ INSERT INTO book VALUES (
     'NieR:Automata: Short Story Long',
     1,
     'Video Game',
-    '978-1974701841',
+
     256,
     19.69,
     'Viz Media',
@@ -93,10 +100,3 @@ INSERT INTO users (username, not_salty_password, admin_account) VALUES (
     'asdfjkl;',
     'true'
 );
-
-/* remove tables */
-DROP TABLE accounting;
-DROP TABLE orders;
-DROP TABLE publisher;
-DROP TABLE users;
-DROP TABLE book;

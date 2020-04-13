@@ -215,49 +215,18 @@ ${ownerMode ? `\n\t"drop" to remove current book from the bookstore.` : (inCart 
             } else if (bookInfo[bookInfo.length - 1] !== "!") {
                 bookInfo += "\nNo previous book!";
             }
-        } else if (browsingCommand === "add") {
-            if (ownerMode) {
-                const newBook: Book = {
-                    author_name: "",
-                    book_name: "",
-                    count: -1,
-                    genre: "",
-                    isbn: "",
-                    pages: -1,
-                    price: 0,
-                    publisher: "",
-                    royalty: 0,
-                };
-                console.clear();
-                console.log(`Beginning the addition of a new book process. Follow the prompts, and type "exit" to exit anytime.\n`);
-                const gotInfo: any = await getInfo(newBook, Object.keys(newBook), true, true);
-                if (gotInfo !== "exit") {
-                    // TODO check if have enough cash on hand to order $count copies of new
-                    const values: any = Object.keys(gotInfo).map((key: string) => {
-                        if (key === "count" || key === "pages") {
-                            return parseInt(gotInfo[`${key}`], 10);
-                        } else if (key === "price" || key === "royalty") {
-                            return parseFloat(gotInfo[`${key}`]);
-                        } else {
-                            return gotInfo[`${key}`];
-                        }
-                    });
-                    await pgClient.query(`INSERT INTO book VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, values);
-                    bookInfo = `${bookInfoTemplate(cart, bookIndex)}\nAdded "${newBook.book_name}" to the bookstore.`;
-                }
-            } else if (!(guestMode || inCart)) {
-                const addToCart = books.splice(bookIndex, 1)[0];
-                if (bookIndex === books.length) {
-                    bookIndex--;
-                }
-                cart.push(addToCart);
-                if (books.length !== 0) {
-                    bookInfo = bookInfoTemplate(books, bookIndex);
-                } else {
-                    bookInfo = `No more books.`;
-                }
-                bookInfo += `\nAdded "${addToCart.book_name}" to cart.`;
+        } else if (browsingCommand === "add" && !(guestMode || inCart)) {
+            const addToCart = books.splice(bookIndex, 1)[0];
+            if (bookIndex === books.length) {
+                bookIndex--;
             }
+            cart.push(addToCart);
+            if (books.length !== 0) {
+                bookInfo = bookInfoTemplate(books, bookIndex);
+            } else {
+                bookInfo = `No more books.`;
+            }
+            bookInfo += `\nAdded "${addToCart.book_name}" to cart.`;
         } else if (browsingCommand === "drop") {
             if (inCart && cart.length !== 0) {
                 const dropFromCart = cart.splice(bookIndex, 1)[0];
@@ -434,7 +403,34 @@ const loggedInRepl: () => Promise<void> = async () => {
         } else if (command === "money" && ownerMode) {
             // TODO display money
         } else if (command === "add" && ownerMode) {
-            // TODO add new book to bookstore
+            const newBook: Book = {
+                author_name: "",
+                book_name: "",
+                count: -1,
+                genre: "",
+                isbn: "",
+                pages: -1,
+                price: 0,
+                publisher: "",
+                royalty: 0,
+            };
+            console.clear();
+            console.log(`Beginning the addition of a new book process. Follow the prompts, and type "exit" to exit anytime.\n`);
+            const gotInfo: any = await getInfo(newBook, Object.keys(newBook), true, true);
+            if (gotInfo !== "exit") {
+                // TODO check if have enough cash on hand to order $count copies of new
+                const values: any = Object.keys(gotInfo).map((key: string) => {
+                    if (key === "count" || key === "pages") {
+                        return parseInt(gotInfo[`${key}`], 10);
+                    } else if (key === "price" || key === "royalty") {
+                        return parseFloat(gotInfo[`${key}`]);
+                    } else {
+                        return gotInfo[`${key}`];
+                    }
+                });
+                await pgClient.query(`INSERT INTO book VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, values);
+                console.log(`Added "${newBook.book_name}" to the bookstore.`);
+            }
         } else if (command === "publishers" && ownerMode) {
             // TODO view publishers
             // TODO automatically "email" publishers when stock of a certain book falls beneath 10
