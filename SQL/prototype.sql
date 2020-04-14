@@ -28,8 +28,8 @@ CREATE TABLE billing_info(
     phone TEXT NOT NULL,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
-    card_number INT NOT NULL,
-    cvv INT NOT NULL,
+    card_number TEXT NOT NULL,
+    cvv TEXT NOT NULL,
     expiry TEXT NOT NULL
 );
 
@@ -37,7 +37,8 @@ CREATE TABLE bookstore_user(
     user_name TEXT PRIMARY KEY,
     pass TEXT NOT NULL,
     superuser BOOLEAN NOT NULL,
-    contact_info_id INT REFERENCES contact_info
+    contact_info_id INT REFERENCES contact_info,
+    billing_info_id INT REFERENCES billing_info
 );
 
 CREATE TABLE purchase(
@@ -92,16 +93,29 @@ INSERT INTO contact_info (street, city, zip, phone, first_name, last_name) VALUE
     'Kevin',
     'Li'
 );
-INSERT INTO bookstore_user (user_name, pass, superuser, contact_info_id) VALUES (
+INSERT INTO billing_info (street, city, zip, phone, first_name, last_name, card_number, cvv, expiry) VALUES (
+    '1125 Colonel By Drive',
+    'Ottawa',
+    'K1S 5B6',
+    '613-123-4567',
+    'Kevin',
+    'Li',
+    '1234567812345678',
+    '123',
+    '12/34'
+);
+INSERT INTO bookstore_user (user_name, pass, superuser, contact_info_id, billing_info_id) VALUES (
     'kvn',
     'asdfjkl;',
     'false',
+    1,
     1
 );
-INSERT INTO bookstore_user (user_name, pass, superuser, contact_info_id) VALUES (
+INSERT INTO bookstore_user (user_name, pass, superuser, contact_info_id, billing_info_id) VALUES (
     'kevin',
     'asdfjkl;',
     'true',
+    1,
     1
 );
 
