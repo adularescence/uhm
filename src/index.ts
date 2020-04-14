@@ -3,37 +3,62 @@ import readline from "readline";
 import auth = require("./auth.json");
 
 // Types
-declare interface Book {
-    author_name: string;
-    book_name: string;
-    count: number;
-    genre: string;
-    isbn: string;
-    pages: number;
-    price: number;
-    publisher: string;
-    royalty: number;
-}
-declare interface Publisher {
-    banking_account: number;
-    email: string;
-    phone_number: string;
-    publisher_address: string;
-    publisher_name: string;
-}
 declare interface ContactInfo {
-    address: string;
+    street: string;
     city: string;
-    firstName: string;
-    lastName: string;
+    zip: string;
     phone: string;
-    postalCode: string;
+    first_name: string;
+    last_name: string;
 }
 declare interface BillingInfo extends ContactInfo {
-    cardNumber: string;
+    card_number: string;
     cvv: string;
-    expiryDate: string;
+    expiry: string;
 }
+declare interface BookstoreUser {
+    user_name: string;
+    pass: string;
+    superuser: boolean;
+    contact_info_id: number;
+};
+declare interface Purchase {
+    purchase_number: number;
+    purchase_status: string;
+    total: number;
+    destination_id: number;
+    billing_id: number;
+};
+declare interface UserPurchase {
+    user_name: string;
+    purchase_number: number;
+};
+declare interface Publisher {
+    publisher_name: string;
+    street: string;
+    city: string;
+    zip: string;
+    email: string;
+    phone: string;
+};
+declare interface Book {
+    isbn: string;
+    book_name: string;
+    author: string;
+    genre: string;
+    publisher: string;    
+    price: number;
+    pages: number;
+    stock: number;
+    royalty: number;
+};
+declare interface PurchaseBook{
+    purchase_number: number;
+    isbn: string;
+    royalties_paid: number;
+    revenue: number;
+    quantity: number;
+};
 
 // Globals
 const pgClient: Postgres.Client = new Postgres.Client(auth.pg);
@@ -192,16 +217,16 @@ const bookInfoTemplate: (books: Book[], bookIndex: number) => string = (books: B
 Book ${bookIndex + 1} of ${books.length}
 
     Name:\t\t${book.book_name}
-    Author:\t\t${book.author_name}
+    Author:\t\t${book.author}
     Genre:\t\t${book.genre}
     Publisher:\t\t${book.publisher}
-    Pages:\t\t${book.pages}
-    Price:\t\t${book.price}`;
+    Price:\t\t${book.price}
+    Pages:\t\t${book.pages}`;
 
     const ownerBookInfo = `
 
     Royalty:\t\t${book.royalty * 100}%
-    Stock:\t\t${book.count} Copies Remaining`;
+    Stock:\t\t${book.stock} Copies Remaining`;
 
     return `${baseBookInfo}${ownerMode ? ownerBookInfo : ""}`;
 };
@@ -279,23 +304,23 @@ ${ownerMode ? `\n\t"drop" to remove current book from the bookstore.` : (inCart 
 };
 const checkout: () => Promise<void> = async () => {
     let shippingInfo: ContactInfo = {
-        address: "",
+        street: "",
         city: "",
-        firstName: "",
-        lastName: "",
-        phone: "",
-        postalCode: ""
+        zip: "",
+        first_name: "",
+        last_name: "",
+        phone: ""
     };
     let billingInfo: BillingInfo = {
-        address: "",
-        cardNumber: "",
+        street: "",
         city: "",
-        cvv: "",
-        expiryDate: "",
-        firstName: "",
-        lastName: "",
+        zip: "",
+        first_name: "",
+        last_name: "",
         phone: "",
-        postalCode: ""
+        card_number: "",
+        cvv: "",
+        expiry: ""
     };
 
     console.log(`Beginning the checkout process. Follow the prompts, and type "exit" to exit anytime.`);
@@ -388,10 +413,9 @@ const publisherInfoTemplate: (publishers: Publisher[], publisherIndex: number) =
     return `Publisher ${publisherIndex + 1} of ${publishers.length}
 
     Name:\t\t${publisher.publisher_name}
-    Address:\t\t${publisher.publisher_address}
+    Address:\t\t${publisher.street}, ${publisher.city} ${publisher.zip}
     Email:\t\t${publisher.email}
-    Phone:\t\t${publisher.phone_number}
-    Banking Account:\t${publisher.banking_account}`;
+    Phone:\t\t${publisher.phone}`;
 };
 
 // REPLs for the program
@@ -433,15 +457,15 @@ const loggedInRepl: () => Promise<void> = async () => {
             // TODO display money
         } else if (command === "add" && ownerMode) {
             const newBook: Book = {
-                author_name: "",
-                book_name: "",
-                count: -1,
-                genre: "",
                 isbn: "",
-                pages: -1,
-                price: 0,
+                book_name: "",
+                author: "",
+                genre: "",
                 publisher: "",
+                price: 0,
+                pages: 0,
                 royalty: 0,
+                stock: 0
             };
             console.clear();
             console.log(`Beginning the addition of a new book process. Follow the prompts, and type "exit" to exit anytime.\n`);
@@ -460,11 +484,12 @@ const loggedInRepl: () => Promise<void> = async () => {
                 let publisherExists: boolean = (await pgClient.query(`SELECT EXISTS (SELECT * FROM publisher WHERE publisher_name = '${gotInfo.publisher}')`)).rows[0].exists;
                 if (!publisherExists) {
                     const newPublisher: Publisher = {
-                        banking_account: -1,
-                        email: "",
-                        phone_number: "",
-                        publisher_address: "",
                         publisher_name: gotInfo.publisher,
+                        street: "",
+                        city: "",
+                        zip: "",
+                        email: "",
+                        phone: ""
                     };
                     console.log("Seems like this book has a new publisher. You should add information for this publisher for the purpose of paying royalties, buying new copies of books, etc.");
                     gotInfo = await getInfo(newPublisher, ["banking_account", "email", "phone_number", "publisher_address"], false, "publisher");
@@ -577,12 +602,12 @@ const mainRepl: () => void = async () => {
             if (accept.toLowerCase() === "y" || accept.toLowerCase() === "yes" || accept === "") {
                 console.log("We will also need your contact info.");
                 let contactInfo: ContactInfo = {
-                    address: "",
+                    street: "",
                     city: "",
-                    firstName: "",
-                    lastName: "",
-                    phone: "",
-                    postalCode: ""
+                    zip: "",
+                    first_name: "",
+                    last_name: "",
+                    phone: ""
                 };
                 contactInfo = await getInfo(contactInfo, Object.keys(contactInfo), false, "info");
 
