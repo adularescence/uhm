@@ -160,6 +160,7 @@ const scanner: readline.Interface = readline.createInterface({
 let currentUser: string = "";
 let guestMode: boolean = true;
 let ownerMode: boolean = false;
+let inCart: boolean = false;
 let userCart: Book[] = [];
 
 // Useful Functions
@@ -193,12 +194,17 @@ const search: () => Promise<void> = async () => {
 
     console.log(queryText); // debug
     const dbRes: Postgres.QueryResult = await pgClient.query(queryText);
-    const books: Book[] = dbRes.rows;
+    let books: Book[] = dbRes.rows;
     if (books.length === 0) {
         console.log("No books with specified search options found.");
     } else {
-        const newCart: Book[] = await browseBooks(books, false);
-        if (!guestMode) {
+        books = books.map((book) => {
+            if (book.stock !== -1) {
+                return book;
+            }
+        });
+        const newCart: Book[] = await browseBooks(books);
+        if (!(guestMode || ownerMode)) {
             userCart = newCart;
         }
     }
@@ -225,7 +231,7 @@ Book ${bookIndex + 1} of ${books.length}
     Publisher:\t\t${book.publisher}
     Price:\t\t${book.price}
     Pages:\t\t${book.pages}
-    Stock:\t\t${book.stock} Copies Remaining`;
+    Stock:\t\t${book.stock} Copies ${inCart ? "In Cart" : "Remaining"}`;
 
     const ownerBookInfo = `
 
@@ -233,21 +239,28 @@ Book ${bookIndex + 1} of ${books.length}
 
     return `${baseBookInfo}${ownerMode ? ownerBookInfo : ""}`;
 };
-const browseBooks: (books: Book[], cart: boolean) => Promise<Book[]> = async (books: Book[], inCart: boolean) => {
+const browseBooks: (books: Book[]) => Promise<Book[]> = async (books: Book[]) => {
     const cart: Book[] = (inCart || ownerMode) ? books : [];
     let bookIndex: number = 0;
     let bookInfo: string = books.length !== 0 ? bookInfoTemplate(books, bookIndex) : "No books in your cart.";
     let browsingCommand: string = "";
+    let argv: string[] = [];
     while (browsingCommand !== "exit") {
         console.clear();
+        let total: number = 0.0;
+        cart.forEach((book: Book) => total += book.price * book.stock);
+
         const prompt: string = `Viewing the ${ownerMode ? "books in the bookstore" : (inCart ? "books in your cart" : "found books")}.
         "next" or "prev" for next/previous book.\
-${ownerMode ? `\n\t"add" to add a new book to the bookstore.` : ((guestMode || inCart) ? "" : `\n\t"add" to add current book to cart.`)}\
-${ownerMode ? `\n\t"drop" to remove current book from the bookstore.` : (inCart ? `\n\t"drop" to remove current book from cart.` : "")}
-        "exit" to exit.\n${bookInfo}\n`;
-        
+${(guestMode || inCart) ? "" : `\n\t"add <count>" to add <count> copies of current book to cart.`}\
+${ownerMode ? `\n\t"drop" to remove current book from the "shelves".` : (inCart ? `\n\t"drop <count>" to remove <count> copies of current book from cart.` : "")}
+        "exit" to exit.${!ownerMode ? `\n\tTotal price of books in cart: $${Math.round(total * 100) / 100}` : ""}\n${bookInfo}\n`;
+
         // TODO add/drop <number of books to add/drop>
-        browsingCommand = (await askQuestion(prompt)).trim().toLowerCase();
+        argv = (await askQuestion(prompt)).trim().toLowerCase().split(" ");
+        browsingCommand = argv[0];
+        argv = argv.splice(1);
+
         if (browsingCommand === "next" && (inCart ? cart.length !== 0 : books.length !== 0)) {
             if (bookIndex < (inCart ? cart.length - 1 : books.length - 1)) {
                 bookIndex++;
@@ -263,31 +276,64 @@ ${ownerMode ? `\n\t"drop" to remove current book from the bookstore.` : (inCart 
                 bookInfo += "\nNo previous book!";
             }
         } else if (browsingCommand === "add" && !(guestMode || inCart)) {
-            const addToCart = books.splice(bookIndex, 1)[0];
-            if (bookIndex === books.length) {
-                bookIndex--;
+            let addCount: number = 1;
+            if (argv.length !== 0) {
+                addCount = parseInt(argv[0], 10);
             }
-            cart.push(addToCart);
-            if (books.length !== 0) {
-                bookInfo = bookInfoTemplate(books, bookIndex);
+            if (!isNaN(addCount) && addCount > 0) {
+                const referenceBook: Book = books[bookIndex];
+                if (addCount <= referenceBook.stock) {
+                    const bookToAdd: Book = {
+                        isbn: referenceBook.isbn,
+                        book_name: referenceBook.book_name,
+                        author: referenceBook.author,
+                        genre: referenceBook.genre,
+                        publisher: referenceBook.publisher,
+                        price: referenceBook.price,
+                        pages: referenceBook.pages,
+                        stock: addCount,
+                        royalty: referenceBook.royalty
+                    };
+                    referenceBook.stock -= addCount;
+                    cart.push(bookToAdd);
+                    bookInfo = bookInfoTemplate(books, bookIndex);
+                    bookInfo += `\nAdded ${addCount} ${addCount === 1 ? "copy" : "copies"} of "${bookToAdd.book_name}" to cart.`;
+                } else {
+                    bookInfo = bookInfoTemplate(books, bookIndex);
+                    bookInfo += `\nThere isn't enough stock of this book to add ${addCount} ${addCount === 1 ? "copy" : "copies"} to your cart.`;
+                }
             } else {
-                bookInfo = `No more books.`;
+                bookInfo = bookInfoTemplate(books, bookIndex);
+                bookInfo += `\n"add ${argv[0]}" is invalid.`;
             }
-            bookInfo += `\nAdded "${addToCart.book_name}" to cart.`;
         } else if (browsingCommand === "drop") {
             if (inCart && cart.length !== 0) {
-                const dropFromCart = cart.splice(bookIndex, 1)[0];
-                if (bookIndex === cart.length) {
-                    bookIndex--;
+                let dropCount: number = 1;
+                if (argv.length !== 0) {
+                    dropCount = parseInt(argv[0], 10);
                 }
-                if (cart.length !== 0) {
+                const referenceBook: Book = cart[bookIndex];
+                if (!isNaN(dropCount) && dropCount > 0 && dropCount <= referenceBook.stock) {
+                    referenceBook.stock -= dropCount;
                     bookInfo = bookInfoTemplate(cart, bookIndex);
+                    if (referenceBook.stock === 0) {
+                        cart.splice(bookIndex, 1);
+                        if (bookIndex === cart.length) {
+                            bookIndex--;
+                        }
+                        if (cart.length !== 0) {
+                            bookInfo = bookInfo = bookInfoTemplate(cart, bookIndex);
+                        } else {
+                            bookInfo = `No more books in your cart.`;
+                        }
+                    }
+                    bookInfo += `\nDropped ${dropCount} ${dropCount === 1 ? "copy" : "copies"} of "${referenceBook.book_name}" from your cart.`;
                 } else {
-                    bookInfo = `No more books in your cart.`;
+                    bookInfo = bookInfoTemplate(books, bookIndex);
+                    bookInfo += `\n"drop ${argv[0]}" is invalid.`;
                 }
-                bookInfo += `\nDropped "${dropFromCart.book_name}" from your cart.`;
             } else if (ownerMode) {
-                const confirm: boolean = (await askQuestion("Really remove this book from the bookstore (yes, no)?\n")).trim().toLowerCase() === "yes";
+                const confirm: boolean = (await askQuestion(`Really remove this book from the "shelves" (yes, no)?\n`)).trim().toLowerCase() === "yes";
                 if (confirm) {
                     const bookToDelete: Book = cart.splice(bookIndex, 1)[0];
                     if (bookIndex === cart.length) {
@@ -298,8 +344,8 @@ ${ownerMode ? `\n\t"drop" to remove current book from the bookstore.` : (inCart 
                     } else {
                         bookInfo = `No more books from your search.`;
                     }
-                    const dbRes: Postgres.QueryResult = await pgClient.query(`DELETE FROM book WHERE isbn = '${bookToDelete.isbn}'`);
-                    bookInfo += `\nDeleted "${bookToDelete.book_name}" from the bookstore.`;
+                    await pgClient.query(`UPDATE book SET stock = -1 WHERE isbn = '${bookToDelete.isbn}'`);
+                    bookInfo += `\nRemoved "${bookToDelete.book_name}" from the "shelves".`;
                 }
             }
         }
@@ -484,7 +530,9 @@ const loggedInRepl: () => Promise<void> = async () => {
             }
             console.log(dbRes.rows);
         } else if (command === "cart" && !ownerMode) {
-            userCart = await browseBooks(userCart, true);
+            inCart = true;
+            userCart = await browseBooks(userCart);
+            inCart = false;
         } else if (command === "checkout") {
             await checkout();
         } else if (command === "add" && ownerMode) {
