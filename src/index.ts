@@ -4,6 +4,7 @@ import auth = require("./auth.json");
 
 // Types
 declare interface ContactInfo {
+    id: number;
     street: string;
     city: string;
     zip: string;
@@ -21,18 +22,19 @@ declare interface BookstoreUser {
     pass: string;
     superuser: boolean;
     contact_info_id: number;
-};
+    billing_info_id: number;
+}
 declare interface Purchase {
     purchase_number: number;
     purchase_status: string;
     total: number;
     destination_id: number;
     billing_id: number;
-};
+}
 declare interface UserPurchase {
     user_name: string;
     purchase_number: number;
-};
+}
 declare interface Publisher {
     publisher_name: string;
     street: string;
@@ -40,25 +42,25 @@ declare interface Publisher {
     zip: string;
     email: string;
     phone: string;
-};
+}
 declare interface Book {
     isbn: string;
     book_name: string;
     author: string;
     genre: string;
-    publisher: string;    
+    publisher: string;
     price: number;
     pages: number;
     stock: number;
     royalty: number;
-};
-declare interface PurchaseBook{
+}
+declare interface PurchaseBook {
     purchase_number: number;
     isbn: string;
     royalties_paid: number;
     revenue: number;
     quantity: number;
-};
+}
 
 // Globals
 const pgClient: Postgres.Client = new Postgres.Client(auth.pg);
@@ -74,33 +76,34 @@ const searchQueryTypes = {
 };
 const validators = {
     book: {
-        author_name: "^.+$",
-        book_name: "^.+$",
-        count: "^\\d+$",
-        genre: "^.+$",
         isbn: "^\\d{3}-\\d{10}$",
-        pages: "^\\d+$",
-        price: "^\\d+\\.\\d{2}$",
+        book_name: "^.+$",
+        author: "^.+$",
+        genre: "^.+$",
         publisher: "^.+$",
+        price: "^\\d+\\.\\d{2}$",
+        pages: "^\\d+$",
+        stock: "^\\d+$",
         royalty: "^\\d\.\\d{2}$",
     },
     info: {
-        address: "^\\d+ [A-Z][a-z]+ [A-Z][a-z]+$",
-        cardNumber: "^\\d{16}$",
-        city: "^[A-Za-z\\-]+$",
-        cvv: "^\\d{3}$",
-        expiryDate: "^\\d{2}/\\d{2}$",
-        firstName: "^[A-Za-z]+$",
-        lastName: "^[A-Za-z]+$",
+        street: "^.+$",
+        city: "^.+$",
+        zip: "^[A-Z]\\d[A-Z] \\d[A-Z]\\d$",
         phone: "^\\d{3}-\\d{3}-\\d{4}$",
-        postalCode: "^[A-Z]\\d[A-Z] \\d[A-Z]\\d$",
+        first_name: "^.+$",
+        last_name: "^.+$",
+        card_number: "^\\d{16}$",
+        cvv: "^\\d{3}$",
+        expiry: "^\\d{2}/\\d{2}$",
     },
     publisher: {
-        banking_account: "^\\d+$",
-        email: "^.+@.+\\..+$",
-        phone_number: "^\\d{3}-\\d{3}-\\d{4}$",
-        publisher_address: "^\\d+ [A-Z][a-z]+ [A-Z][a-z]+$",
-        publisher_name: "^.+$"
+        publisher_name: "^.+$",
+        street: "^.+$",
+        city: "^.+$",
+        zip: "^[A-Z]\\d[A-Z] \\d[A-Z]\\d$",
+        email: "^.+@.+$",
+        phone: "^\\d{3}-\\d{3}-\\d{4}$",
     },
 };
 
@@ -304,6 +307,7 @@ ${ownerMode ? `\n\t"drop" to remove current book from the bookstore.` : (inCart 
 };
 const checkout: () => Promise<void> = async () => {
     let shippingInfo: ContactInfo = {
+        id: 0,
         street: "",
         city: "",
         zip: "",
@@ -312,6 +316,7 @@ const checkout: () => Promise<void> = async () => {
         phone: ""
     };
     let billingInfo: BillingInfo = {
+        id: 0,
         street: "",
         city: "",
         zip: "",
@@ -332,7 +337,7 @@ const checkout: () => Promise<void> = async () => {
         return;
     } else {
         // else assume "no"
-        gotInfo = await getInfo(shippingInfo, Object.keys(shippingInfo), true, "info");
+        gotInfo = await getInfo(shippingInfo, objectDifference(shippingInfo, ["id"], "keys"), true, "info");
         if (gotInfo === "exit") {
             return;
         } else {
@@ -355,7 +360,7 @@ const checkout: () => Promise<void> = async () => {
         }
     } else {
         // else assume "neither"
-        gotInfo = await getInfo(billingInfo, Object.keys(billingInfo), true, "info");
+        gotInfo = await getInfo(billingInfo, objectDifference(billingInfo, ["id"], "keys"), true, "info");
         if (gotInfo === "exit") {
             return;
         } else {
@@ -416,6 +421,23 @@ const publisherInfoTemplate: (publishers: Publisher[], publisherIndex: number) =
     Address:\t\t${publisher.street}, ${publisher.city} ${publisher.zip}
     Email:\t\t${publisher.email}
     Phone:\t\t${publisher.phone}`;
+};
+const objectDifference: (obj: object, diff: any[], target: string) => any[] = (obj: object, diff: any[], target: string) => {
+    const newArr: any[] = [];
+    if (target === "keys") {
+        Object.keys(obj).forEach((key) => {
+            if (!diff.includes(key)) {
+                newArr.push(key);
+            }
+        });
+    } else if (target === "values") {
+        Object.keys(obj).forEach((key) => {
+            if (!diff.includes(key)) {
+                newArr.push(obj[`${key}`]);
+            }
+        });
+    }
+    return newArr;
 };
 
 // REPLs for the program
@@ -566,17 +588,17 @@ const mainRepl: () => void = async () => {
         const argv: string[] = input.splice(1);
 
         if (command === "login") {
-            const username = (await askQuestion("What is your username?\n> ")).trim();
+            const username: string = (await askQuestion("What is your username?\n> ")).trim();
             // just gonna leave their password right out in the open
             // their passwords are also stored in plaintext
-            const password = (await askQuestion("What is the password?\n> ")).trim();
-            const dbRes = await pgClient.query(`SELECT * FROM users WHERE username = '${username}' AND not_salty_password = '${password}'`);
+            const password: string = (await askQuestion("What is the password?\n> ")).trim();
+            const dbRes: Postgres.QueryResult = await pgClient.query(`SELECT * FROM bookstore_user WHERE username = '${username}' AND pass = '${password}'`);
             if (dbRes.rows.length === 1) {
-                const loggedIn = dbRes.rows[0];
+                const loggedIn: BookstoreUser = dbRes.rows[0];
                 guestMode = false;
-                ownerMode = loggedIn.admin_account;
+                ownerMode = loggedIn.superuser;
                 userCart = [];
-                currentUser = loggedIn.username;
+                currentUser = loggedIn.user_name;
                 await loggedInRepl();
                 guestMode = true;
                 ownerMode = false;
@@ -584,24 +606,31 @@ const mainRepl: () => void = async () => {
                 console.error("Sorry, you're not in the database (which means you should make a new user), or the password you entered is not the correct one.");
             }
         } else if (command === "register") {
-            const existingUsers = (await pgClient.query("SELECT username FROM users")).rows;
-            let newUsername = "";
-            let usernameExists = true;
+            const existingUsers: BookstoreUser[] = (await pgClient.query("SELECT user_name FROM bookstore_user")).rows;
+            let usernameExists: boolean = true;
+            const newUser: BookstoreUser = {
+                user_name: "",
+                pass: "",
+                superuser: false,
+                contact_info_id: 0,
+                billing_info_id: 0,
+            };
             while (usernameExists) {
-                newUsername = (await askQuestion("What would you like your new username to be?\n> ")).trim();
+                newUser.user_name = (await askQuestion("What would you like your new username to be?\n> ")).trim();
                 usernameExists = false;
                 existingUsers.forEach((existingUser) => {
-                    if (existingUser.username === newUsername) {
+                    if (existingUser.user_name === newUser.user_name) {
                         usernameExists = true;
                         console.log("That username is already taken.");
                     }
                 });
             }
-            const password = (await askQuestion("What would you like your new password to be?\n> ")).trim();
-            const accept = (await askQuestion(`Your username shall be '${newUsername} and your password shall be ${password}, is this okay (Y/n)?\n> `)).trim();
+            newUser.pass = (await askQuestion("What would you like your new password to be?\n> ")).trim();
+            const accept: string = (await askQuestion(`Your username shall be '${newUser.user_name} and your password shall be ${newUser.pass}, is this okay (Y/n)?\n> `)).trim();
             if (accept.toLowerCase() === "y" || accept.toLowerCase() === "yes" || accept === "") {
                 console.log("We will also need your contact info.");
                 let contactInfo: ContactInfo = {
+                    id: 0,
                     street: "",
                     city: "",
                     zip: "",
@@ -609,10 +638,42 @@ const mainRepl: () => void = async () => {
                     last_name: "",
                     phone: ""
                 };
-                contactInfo = await getInfo(contactInfo, Object.keys(contactInfo), false, "info");
+                contactInfo = await getInfo(contactInfo, objectDifference(contactInfo, ["id"], "keys"), false, "info");
 
-                // await pgClient.query("INSERT INTO users (username, not_salty_password, admin_account) VALUES ($1, $2, $3)", [newUsername, password, false]);
-                // TODO insert this contact info into DB
+                console.log("Finally, we will need your billing info.");
+                let billingInfo: BillingInfo = {
+                    id: 0,
+                    street: "",
+                    city: "",
+                    zip: "",
+                    first_name: "",
+                    last_name: "",
+                    phone: "",
+                    card_number: "",
+                    cvv: "",
+                    expiry: ""
+                };
+                const sameAsContact: boolean = (await askQuestion("Is your billing adderess the same as your contact info (yes, no)?")).trim().toLowerCase() === "yes";
+                if (sameAsContact) {
+                    Object.keys(contactInfo).forEach((key) => {
+                        billingInfo[`${key}`] = contactInfo[`${key}`];
+                    });
+                    billingInfo = await getInfo(billingInfo, ["card_number", "cvv", "expiry"], false, "info");
+                } else {
+                    billingInfo = await getInfo(billingInfo, objectDifference(billingInfo, ["id"], "keys"), false, "info");
+                }
+                let queryText: string = "INSERT INTO contact_info (street, city, zip, first_name, last_name, phone) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *";
+                let values = objectDifference(contactInfo, ["id"], "values");
+                const insertedContactInfo: ContactInfo = (await pgClient.query(queryText, values)).rows[0];
+                newUser.contact_info_id = insertedContactInfo.id;
+
+                queryText = "INSERT INTO billing_info (street, city, zip, first_name, last_name, phone, card_number, cvv, expiry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *";
+                values = objectDifference(billingInfo, ["id"], "values");
+                const insertedBillingInfo: BillingInfo = (await pgClient.query(queryText, values)).rows[0];
+                newUser.billing_info_id = insertedBillingInfo.id;
+
+                queryText = "INSERT INTO bookstore_user (user_name, pass, superuser, contact_info_id, billing_info_id) VALUES ($1, $2, $3, $4, $5)";
+                await pgClient.query(queryText, Object.values(newUser));
                 console.log("A new user has been added to the database.\n");
             } else {
                 console.log("Cancelled registration.");
