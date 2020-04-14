@@ -224,12 +224,12 @@ Book ${bookIndex + 1} of ${books.length}
     Genre:\t\t${book.genre}
     Publisher:\t\t${book.publisher}
     Price:\t\t${book.price}
-    Pages:\t\t${book.pages}`;
+    Pages:\t\t${book.pages}
+    Stock:\t\t${book.stock} Copies Remaining`;
 
     const ownerBookInfo = `
 
-    Royalty:\t\t${book.royalty * 100}%
-    Stock:\t\t${book.stock} Copies Remaining`;
+    Royalty:\t\t${book.royalty * 100}%`;
 
     return `${baseBookInfo}${ownerMode ? ownerBookInfo : ""}`;
 };
@@ -245,7 +245,8 @@ const browseBooks: (books: Book[], cart: boolean) => Promise<Book[]> = async (bo
 ${ownerMode ? `\n\t"add" to add a new book to the bookstore.` : ((guestMode || inCart) ? "" : `\n\t"add" to add current book to cart.`)}\
 ${ownerMode ? `\n\t"drop" to remove current book from the bookstore.` : (inCart ? `\n\t"drop" to remove current book from cart.` : "")}
         "exit" to exit.\n${bookInfo}\n`;
-
+        
+        // TODO add/drop <number of books to add/drop>
         browsingCommand = (await askQuestion(prompt)).trim().toLowerCase();
         if (browsingCommand === "next" && (inCart ? cart.length !== 0 : books.length !== 0)) {
             if (bookIndex < (inCart ? cart.length - 1 : books.length - 1)) {
@@ -306,7 +307,7 @@ ${ownerMode ? `\n\t"drop" to remove current book from the bookstore.` : (inCart 
     return cart;
 };
 const checkout: () => Promise<void> = async () => {
-    let shippingInfo: ContactInfo = {
+    let destinationInfo: ContactInfo = {
         id: 0,
         street: "",
         city: "",
@@ -330,29 +331,40 @@ const checkout: () => Promise<void> = async () => {
 
     console.log(`Beginning the checkout process. Follow the prompts, and type "exit" to exit anytime.`);
     let gotInfo: any;
-    let sameInfo: string = (await askQuestion(`Is your shipping info the same as your contact info (yes, no)?\n`)).trim().toLowerCase();
+    let sameInfo: string = (await askQuestion(`Is the destination the same as your contact info (yes, no)?\n`)).trim().toLowerCase();
     if (sameInfo === "yes") {
-        // TODO copy user's contact info over
+        destinationInfo = (await pgClient.query(`SELECT * FROM contact_info WHERE id = (SELECT contact_info_id FROM bookstore_user WHERE user_name = ${currentUser})`)).rows[0];
     } else if (sameInfo === "exit") {
         return;
     } else {
         // else assume "no"
-        gotInfo = await getInfo(shippingInfo, objectDifference(shippingInfo, ["id"], "keys"), true, "info");
+        gotInfo = await getInfo(destinationInfo, objectDifference(destinationInfo, ["id"], "keys"), true, "info");
         if (gotInfo === "exit") {
             return;
         } else {
-            shippingInfo = gotInfo;
+            destinationInfo = gotInfo;
         }
     }
 
-    sameInfo = (await askQuestion(`Is your billing info the same as your contact/shipping info (contact/shipping/neither)?\n`)).trim().toLowerCase();
-    if (sameInfo === "contact") {
-        // TODO copy user's contact info over
-    } else if (sameInfo === "shipping") {
-        Object.keys(shippingInfo).forEach((key: string) => {
-            billingInfo[`${key}`] = shippingInfo[`${key}`];
+    sameInfo = (await askQuestion(`Is your billing info the same as your default billing/contact info, or the same address as the destination (billing/contact/destination/none)?\n`)).trim().toLowerCase();
+    if (sameInfo === "billing") {
+        billingInfo = (await pgClient.query(`SELECT * FROM billing_info WHERE id = (SELECT billing_info_id FROM bookstore_user WHERE user_name = ${currentUser})`)).rows[0];
+    } else if (sameInfo === "contact") {
+        const defaultContactInfo: ContactInfo = (await pgClient.query(`SELECT * FROM contact_info WHERE id = (SELECT contact_info_id FROM bookstore_user WHERE user_name = ${currentUser})`)).rows[0];
+        Object.keys(defaultContactInfo).forEach((key: string) => {
+            billingInfo[`${key}`] = defaultContactInfo[`${key}`];
         });
-        gotInfo = await getInfo(billingInfo, ["cardNumber", "cvv", "expiryDate"], true, "info");
+        gotInfo = await getInfo(billingInfo, ["card_number", "cvv", "expiry"], true, "info");
+        if (gotInfo === "exit") {
+            return;
+        } else {
+            billingInfo = gotInfo;
+        }
+    } else if (sameInfo === "destination") {
+        Object.keys(destinationInfo).forEach((key: string) => {
+            billingInfo[`${key}`] = destinationInfo[`${key}`];
+        });
+        gotInfo = await getInfo(billingInfo, ["card_number", "cvv", "expiry"], true, "info");
         if (gotInfo === "exit") {
             return;
         } else {
@@ -475,8 +487,6 @@ const loggedInRepl: () => Promise<void> = async () => {
             userCart = await browseBooks(userCart, true);
         } else if (command === "checkout") {
             await checkout();
-        } else if (command === "money" && ownerMode) {
-            // TODO display money
         } else if (command === "add" && ownerMode) {
             const newBook: Book = {
                 isbn: "",
@@ -592,7 +602,7 @@ const mainRepl: () => void = async () => {
             // just gonna leave their password right out in the open
             // their passwords are also stored in plaintext
             const password: string = (await askQuestion("What is the password?\n> ")).trim();
-            const dbRes: Postgres.QueryResult = await pgClient.query(`SELECT * FROM bookstore_user WHERE username = '${username}' AND pass = '${password}'`);
+            const dbRes: Postgres.QueryResult = await pgClient.query(`SELECT * FROM bookstore_user WHERE user_name = '${username}' AND pass = '${password}'`);
             if (dbRes.rows.length === 1) {
                 const loggedIn: BookstoreUser = dbRes.rows[0];
                 guestMode = false;
