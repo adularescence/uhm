@@ -1,126 +1,175 @@
 /* remove tables */
+DROP TABLE purchase_book;
 DROP TABLE book;
-DROP TABLE accounting;
-DROP TABLE orders;
 DROP TABLE publisher;
-DROP TABLE users;
+DROP TABLE user_purchase;
+DROP TABLE bookstore_user;
+DROP TABLE purchase;
+DROP TABLE contact_info;
+DROP TABLE billing_info;
 
 
-CREATE TABLE users(
-    username TEXT PRIMARY KEY,
-    not_salty_password TEXT NOT NULL,
-    admin_account BOOLEAN NOT NULL
+/* table creation */
+CREATE TABLE contact_info(
+    id SERIAL PRIMARY KEY,
+    street TEXT NOT NULL,
+    city TEXT NOT NULL,
+    zip TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL
+);
+
+CREATE TABLE billing_info(
+    id SERIAL PRIMARY KEY,
+    street TEXT NOT NULL,
+    city TEXT NOT NULL,
+    zip TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    card_number INT NOT NULL,
+    cvv INT NOT NULL,
+    expiry TEXT NOT NULL
+);
+
+CREATE TABLE bookstore_user(
+    user_name TEXT PRIMARY KEY,
+    pass TEXT NOT NULL,
+    superuser BOOLEAN NOT NULL,
+    contact_info_id INT REFERENCES contact_info
+);
+
+CREATE TABLE purchase(
+    purchase_number SERIAL PRIMARY KEY,
+    purchase_status TEXT NOT NULL,
+    total MONEY NOT NULL,
+    destination_id INT REFERENCES contact_info,
+    billing_id INT REFERENCES billing_info
+);
+
+CREATE TABLE user_purchase(
+    user_name TEXT REFERENCES bookstore_user,
+    purchase_number INT REFERENCES purchase
 );
 
 CREATE TABLE publisher(
-    banking_account INT NOT NULL,
+    publisher_name TEXT PRIMARY KEY,
+    street TEXT NOT NULL,
+    city TEXT NOT NULL,
+    zip TEXT NOT NULL,
     email TEXT NOT NULL,
-    phone_number TEXT NOT NULL,
-    publisher_address TEXT NOT NULL,
-    publisher_name TEXT PRIMARY KEY
-);
-
-CREATE TABLE orders(
-    id SERIAL PRIMARY KEY,
-    username TEXT REFERENCES users,
-    current_location TEXT NOT NULL,
-    creation_timestamp TIMESTAMP NOT NULL,
-    fulfillment_timestamp TIMESTAMP
-);
-
-CREATE TABLE accounting(
-    cash MONEY PRIMARY KEY
+    phone TEXT NOT NULL
 );
 
 CREATE TABLE book(
-    author_name TEXT NOT NULL,
-    book_name TEXT NOT NULL,
-    count INT NOT NULL,
-    genre TEXT NOT NULL,
     isbn TEXT PRIMARY KEY,
-    pages INT NOT NULL,
-    price MONEY NOT NULL,
+    book_name TEXT NOT NULL,
+    author TEXT NOT NULL,
+    genre TEXT NOT NULL,
     publisher TEXT REFERENCES publisher,
+    price MONEY NOT NULL,
+    pages INT NOT NULL,
+    stock INT NOT NULL,
     royalty NUMERIC (3, 2) NOT NULL
 );
 
-/* bogus users */
-INSERT INTO users (username, not_salty_password, admin_account) VALUES (
+CREATE TABLE purchase_book(
+    purchase_number INT REFERENCES purchase,
+    isbn TEXT REFERENCES book,
+    royalties_paid MONEY NOT NULL,
+    revenue MONEY NOT NULL,
+    quantity INT NOT NULL
+);
+
+
+/* test values */
+INSERT INTO contact_info (street, city, zip, phone, first_name, last_name) VALUES (
+    '1125 Colonel By Drive',
+    'Ottawa',
+    'K1S 5B6',
+    '613-123-4567',
+    'Kevin',
+    'Li'
+);
+INSERT INTO bookstore_user (user_name, pass, superuser, contact_info_id) VALUES (
     'kvn',
     'asdfjkl;',
-    'false'
+    'false',
+    1
 );
-INSERT INTO users (username, not_salty_password, admin_account) VALUES (
+INSERT INTO bookstore_user (user_name, pass, superuser, contact_info_id) VALUES (
     'kevin',
     'asdfjkl;',
-    'true'
+    'true',
+    1
 );
 
-/* bogus publishers */
 INSERT INTO publisher VALUES (
-    1,
-    'support@darkhorsebooks.ca',
-    '416-123-4567',
-    '669 Cassells Street',
-    'Dark Horse Books'
-);
-INSERT INTO publisher VALUES (
-    2,
-    'placeholder@gmail.com',
-    '123-456-7890',
-    '123 Placeholder Street',
-    'Brooks Cole'
-);
-INSERT INTO publisher VALUES (
-    3,
-    'placeholder@outlook.com',
-    '098-765-4321',
-    '456 Placeholder Street',
-    'Viz Media'
-);
-
-/* bogus books */
-INSERT INTO book VALUES (
-    'Square Enix',
-    'NieR: Automata World Guide Volume 1',
-    1,
-    'Video Game',
-    '978-1506710310',
-    192,
-    43.43,
     'Dark Horse Books',
-    0.10
+    '669 Cassells Street',
+    'North Bay',
+    'P1B 4A1',
+    'support@darkhorsebooks.ca',
+    '416-123-4567'
 );
-INSERT INTO book VALUES (
-    'James Stewart',
-    'Calculus: Early Transcendentals',
-    1,
-    'Textbook',
-    '978-1285741550',
-    1368,
-    189.57,
+INSERT INTO publisher VALUES (
     'Brooks Cole',
+    '123 Placeholder Street',
+    'Placeholder',
+    'A1B 2C3',
+    'placeholder@gmail.com',
+    '123-456-7890'
+);
+INSERT INTO publisher VALUES (
+    'Viz Media',
+    '456 Placeholder Street',
+    'Placeholder',
+    'A1B 3C4',
+    'placeholder@outlook.com',
+    '098-765-4321'
+);
+INSERT INTO book VALUES (
+    '978-1506710310',
+    'NieR: Automata World Guide Volume 1',
+    'Square Enix',
+    'Video Game',
+    'Dark Horse Books',
+    43.43,
+    192,
+    10,
     0.10
 );
 INSERT INTO book VALUES (
-    'Yoko Taro',
-    'NieR:Automata: Long Story Short',
-    1,
-    'Video Game',
+    '978-1285741550',
+    'Calculus: Early Transcendentals',
+    'James Stewart',
+    'Textbook',
+    'Brooks Cole',
+    189.57,
+    1368,
+    10,
+    0.10
+);
+INSERT INTO book VALUES (
     '978-1974701629',
-    256,
-    19.69,
+    'NieR:Automata: Long Story Short',
+    'Yoko Taro',
+    'Video Game',
     'Viz Media',
+    19.69,
+    256,
+    10,
     0.10
 );
 INSERT INTO book VALUES (
-    'Yoko Taro',
-    'NieR:Automata: Short Story Long',
-    1,
-    'Video Game',
     '978-1974701841',
-    256,
-    19.69,
+    'NieR:Automata: Short Story Long',
+    'Yoko Taro',
+    'Video Game',
     'Viz Media',
+    19.69,
+    256,
+    10,
     0.10
 );
