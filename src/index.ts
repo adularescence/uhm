@@ -567,7 +567,6 @@ const addBook: () => Promise<void> = async () => {
     console.log(`Beginning the addition of a new book process. Follow the prompts, and type "exit" to exit anytime.\n`);
     let gotInfo: any = await getInfo(newBook, Object.keys(newBook), true, "book");
     if (gotInfo !== "exit") {
-        // TODO check if have enough cash on hand to order $count copies of new
         const values: any = Object.keys(gotInfo).map((key: string) => {
             if (key === "count" || key === "pages") {
                 return parseInt(gotInfo[`${key}`], 10);
@@ -587,12 +586,13 @@ const addBook: () => Promise<void> = async () => {
                 email: "",
                 phone: ""
             };
-            console.log("Seems like this book has a new publisher. You should add information for this publisher for the purpose of paying royalties, buying new copies of books, etc.");
-            gotInfo = await getInfo(newPublisher, ["banking_account", "email", "phone_number", "publisher_address"], false, "publisher");
+            console.log("Seems like this book has a new publisher. Please complete information regarding this publisher.");
+            gotInfo = await getInfo(newPublisher, objectDifference(newPublisher, ["publisher_name"], "keys"), false, "publisher");
             if (gotInfo !== "exit") {
-                gotInfo.banking_account = parseInt(gotInfo.banking_account, 10);
-                gotInfo.publisher_name = newPublisher.publisher_name;
-                await pgClient.query(`INSERT INTO publisher VALUES ($1, $2, $3, $4, $5)`, Object.values(gotInfo));
+                Object.keys(gotInfo).forEach((key) => {
+                    newPublisher[`${key}`] = gotInfo[`${key}`];
+                });
+                await pgClient.query(`INSERT INTO publisher VALUES ($1, $2, $3, $4, $5)`, Object.values(newPublisher));
                 publisherExists = true;
                 console.log(`Added "${newPublisher.publisher_name}" to the list of publishers.`);
             }
