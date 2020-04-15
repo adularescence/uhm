@@ -603,6 +603,52 @@ const addBook: () => Promise<void> = async () => {
         }
     }
 };
+const browsePublisher: (rawInput: string, argv: string[]) => Promise<void> = async (rawInput: string, argv: string[]) => {
+    let queryText: string = `SELECT * FROM publisher`;
+    if (argv.length === 0) {
+        const publishers: any = (await pgClient.query(queryText)).rows;
+        if (publishers.length !== 0) {
+            let publisherBrowseCommand: string = "";
+            let publisherIndex: number = 0;
+            let publisherInfo: string = publisherInfoTemplate(publishers, publisherIndex);
+            while (publisherBrowseCommand !== "exit") {
+                console.clear();
+                const publisherPrompt: string = `Viewing all publishers.\n"next" or "prev" for next/previous publisher.\n"exit" to exit.\n${publisherInfo}\n`;
+                publisherBrowseCommand = (await askQuestion(publisherPrompt)).trim().toLowerCase();
+                if (publisherBrowseCommand === "next") {
+                    if (publisherIndex < publishers.length - 1) {
+                        publisherIndex++;
+                        publisherInfo = publisherInfoTemplate(publishers, publisherIndex);
+                    } else if (publisherInfo[publisherInfo.length - 1] !== "!") {
+                        publisherInfo += `\nNo next publisher!`;
+                    }
+                } else if (publisherBrowseCommand === "prev") {
+                    if (publisherIndex > 0) {
+                        publisherIndex--;
+                        publisherInfo = publisherInfoTemplate(publishers, publisherIndex);
+                    } else if (publisherInfo[publisherInfo.length - 1] !== "!") {
+                        publisherInfo += `\nNo previous publisher!`;
+                    }
+                }
+            }
+        } else {
+            console.log("No publishers found");
+        }
+    } else {
+        if (argv[0].charAt(0) !== `"` || argv[argv.length - 1].charAt(argv[argv.length - 1].length - 1) !== `"`) {
+            console.log("Please enclose the publisher's name in double quotes.");
+        } else {
+            const publisherName: string = rawInput.substring(rawInput.indexOf('"') + 1, rawInput.lastIndexOf('"'));
+            queryText = `${queryText} WHERE publisher_name = '${publisherName}'`;
+            const dbRes: Postgres.QueryResult = await pgClient.query(queryText);
+            if (dbRes.rows.length !== 0) {
+                console.log(publisherInfoTemplate(dbRes.rows, 0));
+            } else {
+                console.log(`No publisher with the name "${publisherName}" found.`);
+            }
+        }
+    }
+};
 
 // REPLs for the program
 const loggedInRepl: () => Promise<void> = async () => {
@@ -644,50 +690,7 @@ const loggedInRepl: () => Promise<void> = async () => {
         } else if (command === "add" && ownerMode) {
             await addBook();
         } else if (command === "publisher" && ownerMode) {
-            let queryText: string = `SELECT * FROM publisher`;
-            if (argv.length === 0) {
-                const publishers: any = (await pgClient.query(queryText)).rows;
-                if (publishers.length !== 0) {
-                    let publisherBrowseCommand: string = "";
-                    let publisherIndex: number = 0;
-                    let publisherInfo: string = publisherInfoTemplate(publishers, publisherIndex);
-                    while (publisherBrowseCommand !== "exit") {
-                        console.clear();
-                        const publisherPrompt: string = `Viewing all publishers.\n"next" or "prev" for next/previous publisher.\n"exit" to exit.\n${publisherInfo}\n`;
-                        publisherBrowseCommand = (await askQuestion(publisherPrompt)).trim().toLowerCase();
-                        if (publisherBrowseCommand === "next") {
-                            if (publisherIndex < publishers.length - 1) {
-                                publisherIndex++;
-                                publisherInfo = publisherInfoTemplate(publishers, publisherIndex);
-                            } else if (publisherInfo[publisherInfo.length - 1] !== "!") {
-                                publisherInfo += `\nNo next publisher!`;
-                            }
-                        } else if (publisherBrowseCommand === "prev") {
-                            if (publisherIndex > 0) {
-                                publisherIndex--;
-                                publisherInfo = publisherInfoTemplate(publishers, publisherIndex);
-                            } else if (publisherInfo[publisherInfo.length - 1] !== "!") {
-                                publisherInfo += `\nNo previous publisher!`;
-                            }
-                        }
-                    }
-                } else {
-                    console.log("No publishers found");
-                }
-            } else {
-                if (argv[0].charAt(0) !== `"` || argv[argv.length - 1].charAt(argv[argv.length - 1].length - 1) !== `"`) {
-                    console.log("Please enclose the publisher's name in double quotes.");
-                } else {
-                    const publisherName: string = rawInput.substring(rawInput.indexOf('"') + 1, rawInput.lastIndexOf('"'));
-                    queryText = `${queryText} WHERE publisher_name = '${publisherName}'`;
-                    const dbRes: Postgres.QueryResult = await pgClient.query(queryText);
-                    if (dbRes.rows.length !== 0) {
-                        console.log(publisherInfoTemplate(dbRes.rows, 0));
-                    } else {
-                        console.log(`No publisher with the name "${publisherName}" found.`);
-                    }
-                }
-            }
+            await browsePublisher(rawInput, argv);
             // TODO automatically "email" publishers when stock of a certain book falls beneath 10
         } else if (command === "metrics" && ownerMode) {
             // TODO show metrics (sales vs expenses, sales per genre, sales per author)
