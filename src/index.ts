@@ -49,7 +49,7 @@ declare interface Book {
     author: string;
     genre: string;
     publisher: string;
-    price: number;
+    price: string;
     pages: number;
     stock: number;
     royalty: number;
@@ -203,9 +203,8 @@ const search: () => Promise<void> = async () => {
                 return book;
             }
         });
-        const newCart: Book[] = await browseBooks(books);
-        if (!(guestMode || ownerMode)) {
-            userCart = newCart;
+        if (!guestMode) {
+            await browseBooks(books);
         }
     }
 };
@@ -239,22 +238,20 @@ Book ${bookIndex + 1} of ${books.length}
 
     return `${baseBookInfo}${ownerMode ? ownerBookInfo : ""}`;
 };
-const browseBooks: (books: Book[]) => Promise<Book[]> = async (books: Book[]) => {
-    const cart: Book[] = (inCart || ownerMode) ? books : [];
+const browseBooks: (books: Book[]) => Promise<void> = async (books: Book[]) => {
+    const cart: Book[] = (inCart || ownerMode) ? books : userCart;
     let bookIndex: number = 0;
     let bookInfo: string = books.length !== 0 ? bookInfoTemplate(books, bookIndex) : "No books in your cart.";
     let browsingCommand: string = "";
     let argv: string[] = [];
     while (browsingCommand !== "exit") {
         console.clear();
-        let total: number = 0.0;
-        cart.forEach((book: Book) => total += book.price * book.stock);
 
         const prompt: string = `Viewing the ${ownerMode ? "books in the bookstore" : (inCart ? "books in your cart" : "found books")}.
         "next" or "prev" for next/previous book.\
 ${(guestMode || inCart) ? "" : `\n\t"add <count>" to add <count> copies of current book to cart.`}\
 ${ownerMode ? `\n\t"drop" to remove current book from the "shelves".` : (inCart ? `\n\t"drop <count>" to remove <count> copies of current book from cart.` : "")}
-        "exit" to exit.${!ownerMode ? `\n\tTotal price of books in cart: $${Math.round(total * 100) / 100}` : ""}\n${bookInfo}\n`;
+        "exit" to exit.${!ownerMode ? `\n\tTotal price of added books in cart: $${getTotalPrice(cart)}` : ""}\n${bookInfo}\n`;
 
         // TODO add/drop <number of books to add/drop>
         argv = (await askQuestion(prompt)).trim().toLowerCase().split(" ");
@@ -350,9 +347,34 @@ ${ownerMode ? `\n\t"drop" to remove current book from the "shelves".` : (inCart 
             }
         }
     }
-    return cart;
+    userCart = cart;
 };
 const checkout: () => Promise<void> = async () => {
+    // don't checkout if cart is empty
+    if (userCart.length === 0) {
+        console.log("Your cart is empty.");
+        return;
+    }
+
+    // hashmap of isbn to book (of books in cart, to be sold)
+    const soldBooks = {};
+    userCart.forEach((book: Book) => {
+        soldBooks[`${book.isbn}`] = book;
+    });
+
+    // first, validate that bookstore has enough stock for what's in userCart
+    let queryText: string = `SELECT * FROM book WHERE isbn = '${Object.keys(soldBooks).join(`' OR isbn = '`)}'`;
+    const targetBooks: Book[] = (await pgClient.query(queryText)).rows;
+    targetBooks.forEach((targetBook: Book) => {
+        const bookInCart: Book = soldBooks[`${targetBook.isbn}`];
+        if (bookInCart.stock > targetBook.stock) {
+            console.log(`Unfortunately, here are only ${targetBook.stock} ${targetBook.stock === 1 ? "copy" : "copies"}\
+of ${bookInCart.book_name}, and you wish to buy ${bookInCart.stock} ${bookInCart.stock === 1 ? "copy" : "copies"} of it.
+Please edit your cart accordingly.`);
+            return;
+        }
+    });
+
     let destinationInfo: ContactInfo = {
         id: 0,
         street: "",
@@ -375,11 +397,11 @@ const checkout: () => Promise<void> = async () => {
         expiry: ""
     };
 
-    console.log(`Beginning the checkout process. Follow the prompts, and type "exit" to exit anytime.`);
+    console.log(`Beginning the checkout process. Follow the prompts, and type "exit" to exit any time.`);
     let gotInfo: any;
-    let sameInfo: string = (await askQuestion(`Is the destination the same as your contact info (yes, no)?\n`)).trim().toLowerCase();
+    let sameInfo: string = (await askQuestion(`Is the destination the same as your default contact info (yes, no)?\n`)).trim().toLowerCase();
     if (sameInfo === "yes") {
-        destinationInfo = (await pgClient.query(`SELECT * FROM contact_info WHERE id = (SELECT contact_info_id FROM bookstore_user WHERE user_name = ${currentUser})`)).rows[0];
+        destinationInfo = (await pgClient.query(`SELECT * FROM contact_info WHERE id = (SELECT contact_info_id FROM bookstore_user WHERE user_name = '${currentUser}')`)).rows[0];
     } else if (sameInfo === "exit") {
         return;
     } else {
@@ -388,15 +410,16 @@ const checkout: () => Promise<void> = async () => {
         if (gotInfo === "exit") {
             return;
         } else {
-            destinationInfo = gotInfo;
+            queryText = `INSERT INTO contact_info (street, city, zip, first_name, last_name, phone) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`;
+            destinationInfo = (await pgClient.query(queryText, objectDifference(gotInfo, ["id"], "values"))).rows[0];
         }
     }
 
     sameInfo = (await askQuestion(`Is your billing info the same as your default billing/contact info, or the same address as the destination (billing/contact/destination/none)?\n`)).trim().toLowerCase();
     if (sameInfo === "billing") {
-        billingInfo = (await pgClient.query(`SELECT * FROM billing_info WHERE id = (SELECT billing_info_id FROM bookstore_user WHERE user_name = ${currentUser})`)).rows[0];
+        billingInfo = (await pgClient.query(`SELECT * FROM billing_info WHERE id = (SELECT billing_info_id FROM bookstore_user WHERE user_name = '${currentUser}')`)).rows[0];
     } else if (sameInfo === "contact") {
-        const defaultContactInfo: ContactInfo = (await pgClient.query(`SELECT * FROM contact_info WHERE id = (SELECT contact_info_id FROM bookstore_user WHERE user_name = ${currentUser})`)).rows[0];
+        const defaultContactInfo: ContactInfo = (await pgClient.query(`SELECT * FROM contact_info WHERE id = (SELECT contact_info_id FROM bookstore_user WHERE user_name = '${currentUser}')`)).rows[0];
         Object.keys(defaultContactInfo).forEach((key: string) => {
             billingInfo[`${key}`] = defaultContactInfo[`${key}`];
         });
@@ -404,7 +427,8 @@ const checkout: () => Promise<void> = async () => {
         if (gotInfo === "exit") {
             return;
         } else {
-            billingInfo = gotInfo;
+            queryText = `INSERT INTO contact_info (street, city, zip, first_name, last_name, phone, card_number, cvv, expiry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`;
+            billingInfo = (await pgClient.query(queryText, objectDifference(gotInfo, ["id"], "values"))).rows[0];
         }
     } else if (sameInfo === "destination") {
         Object.keys(destinationInfo).forEach((key: string) => {
@@ -414,7 +438,8 @@ const checkout: () => Promise<void> = async () => {
         if (gotInfo === "exit") {
             return;
         } else {
-            billingInfo = gotInfo;
+            queryText = `INSERT INTO contact_info (street, city, zip, first_name, last_name, phone, card_number, cvv, expiry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`;
+            billingInfo = (await pgClient.query(queryText, objectDifference(gotInfo, ["id"], "values"))).rows[0];
         }
     } else {
         // else assume "neither"
@@ -422,17 +447,40 @@ const checkout: () => Promise<void> = async () => {
         if (gotInfo === "exit") {
             return;
         } else {
-            billingInfo = gotInfo;
+            queryText = `INSERT INTO contact_info (street, city, zip, first_name, last_name, phone, card_number, cvv, expiry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`;
+            billingInfo = (await pgClient.query(queryText, objectDifference(gotInfo, ["id"], "values"))).rows[0];
         }
     }
 
-    // TODO INSERT INTO orders
-    // TODO deduct copies from bookstore
-    // TODO increase bookstore's cash
-    // TODO randomly advance orders (e.g. warehouse -> in china -> at border -> arrived)
-    const placeholder: string = "100";
+    // create a new purchase tuple
+    queryText = `INSERT INTO purchase (purchase_status, total, destination_id, billing_id) VALUES ($1, $2, $3, $4) RETURNING *`;
+    const newPurchase: Purchase = (await pgClient.query(queryText, ["At our warehouse.", getTotalPrice(userCart), destinationInfo.id, billingInfo.id])).rows[0];
+
+    // create a new user_purchase tuple
+    queryText = `INSERT INTO user_purchase VALUES ('${currentUser}', ${newPurchase.purchase_number}) RETURNING *`;
+    await pgClient.query(queryText);
+
+    // update stock of sold books
+    asyncForEach(targetBooks, async (targetBook: Book) => {
+        const bookInCart: Book = soldBooks[`${targetBook.isbn}`];
+        // no need to check if enough stock, because did that ~100 lines ago
+        queryText = `UPDATE book SET stock = ${targetBook.stock - bookInCart.stock} WHERE isbn = '${targetBook.isbn}'`;
+        await pgClient.query(queryText);
+    });
+
+    // create new purchase_book tuples
+    asyncForEach(Object.values(soldBooks), async (soldBook: Book) => {
+        const quantity: number = soldBook.stock;
+        const price: number = parseFloat(soldBook.price.substring(1));
+        const royaltiesPaid: number = Math.round(quantity * price * soldBook.royalty * 100) / 100;
+        const revenue: number = (Math.round(quantity * price * 100) / 100) - royaltiesPaid;
+        queryText = `INSERT INTO purchase_book VALUES (${newPurchase.purchase_number}, '${soldBook.isbn}', ${royaltiesPaid}, ${revenue}, ${quantity})`;
+        await pgClient.query(queryText);
+    });
+
+    // empty userCart
     userCart = [];
-    console.log(`Your order number is ${placeholder}`);
+    console.log(`Your purchase number is ${newPurchase.purchase_number}.`);
 };
 const checkoutChecker: (prompt: string, pattern: string) => Promise<string> = async (prompt: string, pattern: string) => {
     let input: string = "";
@@ -497,6 +545,13 @@ const objectDifference: (obj: object, diff: any[], target: string) => any[] = (o
     }
     return newArr;
 };
+const getTotalPrice: (books: Book[]) => number = (books: Book[]) => {
+    let total: number = 0.0;
+    books.forEach((book: Book) => {
+        total += (Math.round(parseFloat(book.price.substring(1)) * 100) / 100) * book.stock;
+    });
+    return total;
+};
 
 // REPLs for the program
 const loggedInRepl: () => Promise<void> = async () => {
@@ -531,7 +586,7 @@ const loggedInRepl: () => Promise<void> = async () => {
             console.log(dbRes.rows);
         } else if (command === "cart" && !ownerMode) {
             inCart = true;
-            userCart = await browseBooks(userCart);
+            await browseBooks(userCart);
             inCart = false;
         } else if (command === "checkout") {
             await checkout();
@@ -542,7 +597,7 @@ const loggedInRepl: () => Promise<void> = async () => {
                 author: "",
                 genre: "",
                 publisher: "",
-                price: 0,
+                price: "$0.00",
                 pages: 0,
                 royalty: 0,
                 stock: 0
