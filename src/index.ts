@@ -238,20 +238,19 @@ Book ${bookIndex + 1} of ${books.length}
 
     return `${baseBookInfo}${ownerMode ? ownerBookInfo : ""}`;
 };
-
-const purchaseInfoTemplate: (purchases: Purchase[], purchase:number) => string = (purchases: Purchase[], purchaseIndex: number) => {
+const purchaseInfoTemplate: (purchases: Purchase[], purchase: number) => string = (purchases: Purchase[], purchaseIndex: number) => {
     const purchase: Purchase = purchases[purchaseIndex];
     const basePurchaseInfo = `
     Purchase ${purchaseIndex + 1} of ${purchases.length}
-    
+
     Purchase Number:\t\t${purchase.purchase_number}
     Purchase Status:\t\t${purchase.purchase_status}
-    Total:\t\t${purchase.total}
+    Total:\t\t\t${purchase.total}
     Destination ID:\t\t${purchase.destination_id}
-    Billing ID:\t\t${purchase.billing_id}`;
+    Billing ID:\t\t\t${purchase.billing_id}`;
 
     return `${basePurchaseInfo}`;
-}
+};
 const browseBooks: (books: Book[]) => Promise<void> = async (books: Book[]) => {
     const cart: Book[] = (inCart || ownerMode) ? books : userCart;
     let bookIndex: number = 0;
@@ -363,29 +362,28 @@ ${ownerMode ? `\n\t"drop" to remove current book from the "shelves".` : (inCart 
     userCart = cart;
 };
 const browsePurchases: (purchases: Purchase[]) => Promise<void> = async (purchases: Purchase[]) => {
-    const purchaseHistory: Purchase[] = purchases;
     let purchaseIndex = 0;
-    let purchaseInfo: string = purchases.length !== 0 ? purchaseInfoTemplate(purchases, purchaseIndex) : "No purchases have been made.";
+    let purchaseInfo: string = purchases.length === 0 ? "No purchases have been made." : purchaseInfoTemplate(purchases, purchaseIndex);
     let browsingCommand: string = "";
     let argv: string[] = [];
     while (browsingCommand !== "exit") {
         console.clear();
 
         const prompt: string = `Viewing ${guestMode ? `purchase history for ${currentUser}` : "the purchase history"}.
-        "next" or "prev" for next/previous purchase.`
+        "next" or "prev" for next/previous purchase.\n${purchaseInfo}\n`;
 
         argv = (await askQuestion(prompt)).trim().toLowerCase().split(" ");
         browsingCommand = argv[0];
         argv = argv.splice(1);
 
-        if (browsingCommand === "next" && (purchases.length!==0)) {
+        if (browsingCommand === "next" && (purchases.length !== 0)) {
             if (purchaseIndex < (purchases.length - 1)) {
                 purchaseIndex++;
                 purchaseInfo = purchaseInfoTemplate(purchases, purchaseIndex);
             } else if (purchaseInfo[purchaseInfo.length - 1] !== "!") {
                 purchaseInfo += "\nNo next purchase!";
             }
-        } else if (browsingCommand === "prev" && (purchases.length!==0)) {
+        } else if (browsingCommand === "prev" && (purchases.length !== 0)) {
             if (purchaseIndex > 0) {
                 purchaseIndex--;
                 purchaseInfo = purchaseInfoTemplate(purchases, purchaseIndex);
@@ -808,19 +806,25 @@ const loggedInRepl: () => Promise<void> = async () => {
             await search();
         } else if (command === "turn") {
             await turn(argv);
-        } else if (command === "order") {
-            // TODO look at previous orders' statuses
-            let queryText: string = `SELECT * FROM orders${ownerMode ? "" : `WHERE username = ${currentUser}`}`;
-            let dbRes: Postgres.QueryResult;
-            if (argv.length === 1) {
-                queryText = `${queryText} ${ownerMode ? "WHERE" : "AND"} id = $1`;
-                console.log(queryText);
-                dbRes = await pgClient.query(queryText, [argv[0]]);
+        } else if (command === "purchase") {
+            let queryText: string = `SELECT * FROM purchase`;
+            let purchaseNumbers: number[];
+            if (argv.length === 0 && !ownerMode) {
+                queryText = `SELECT purchase_number FROM user_purchase WHERE user_name = '${currentUser}'`;
+                purchaseNumbers = (await pgClient.query(queryText)).rows.map((purchaseNumber) => {
+                    return purchaseNumber.purchase_number;
+                });
+                queryText = `SELECT * FROM purchase WHERE purchase_number = ${purchaseNumbers.join(` OR purchase_number = `)}`;
+                await browsePurchases((await pgClient.query(queryText)).rows);
             } else {
-                console.log(queryText);
-                dbRes = await pgClient.query(queryText);
+                purchaseNumbers = [parseInt(argv[0], 10)];
+                if (isNaN(purchaseNumbers[0])) {
+                    console.log(`${argv[0]} is not a valid purchase number.`);
+                } else {
+                    queryText = `${queryText} WHERE purchase_number = $1`;
+                    await browsePurchases((await pgClient.query(queryText, purchaseNumbers)).rows);
+                }
             }
-            console.log(dbRes.rows);
         } else if (command === "cart" && !ownerMode) {
             inCart = true;
             await browseBooks(userCart);
