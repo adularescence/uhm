@@ -723,6 +723,25 @@ const register: () => Promise<void> = async () => {
         console.log("Cancelled registration.");
     }
 };
+const login: () => Promise<void> = async () => {
+    const username: string = (await askQuestion("What is your username?\n> ")).trim();
+    // just gonna leave their password right out in the open
+    // their passwords are also stored in plaintext
+    const password: string = (await askQuestion("What is the password?\n> ")).trim();
+    const dbRes: Postgres.QueryResult = await pgClient.query(`SELECT * FROM bookstore_user WHERE user_name = '${username}' AND pass = '${password}'`);
+    if (dbRes.rows.length === 1) {
+        const loggedIn: BookstoreUser = dbRes.rows[0];
+        guestMode = false;
+        ownerMode = loggedIn.superuser;
+        userCart = [];
+        currentUser = loggedIn.user_name;
+        await loggedInRepl();
+        guestMode = true;
+        ownerMode = false;
+    } else {
+        console.error("Sorry, you're not in the database (which means you should make a new user), or the password you entered is not the correct one.");
+    }
+};
 
 // REPLs for the program
 const loggedInRepl: () => Promise<void> = async () => {
@@ -780,23 +799,7 @@ const mainRepl: () => void = async () => {
         const argv: string[] = input.splice(1);
 
         if (command === "login") {
-            const username: string = (await askQuestion("What is your username?\n> ")).trim();
-            // just gonna leave their password right out in the open
-            // their passwords are also stored in plaintext
-            const password: string = (await askQuestion("What is the password?\n> ")).trim();
-            const dbRes: Postgres.QueryResult = await pgClient.query(`SELECT * FROM bookstore_user WHERE user_name = '${username}' AND pass = '${password}'`);
-            if (dbRes.rows.length === 1) {
-                const loggedIn: BookstoreUser = dbRes.rows[0];
-                guestMode = false;
-                ownerMode = loggedIn.superuser;
-                userCart = [];
-                currentUser = loggedIn.user_name;
-                await loggedInRepl();
-                guestMode = true;
-                ownerMode = false;
-            } else {
-                console.error("Sorry, you're not in the database (which means you should make a new user), or the password you entered is not the correct one.");
-            }
+            await login();
         } else if (command === "register") {
             await register();
         } else if (command === "search") {
