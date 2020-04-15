@@ -238,6 +238,20 @@ Book ${bookIndex + 1} of ${books.length}
 
     return `${baseBookInfo}${ownerMode ? ownerBookInfo : ""}`;
 };
+
+const purchaseInfoTemplate: (purchases: Purchase[], purchase:number) => string = (purchases: Purchase[], purchaseIndex: number) => {
+    const purchase: Purchase = purchases[purchaseIndex];
+    const basePurchaseInfo = `
+    Purchase ${purchaseIndex + 1} of ${purchases.length}
+    
+    Purchase Number:\t\t${purchase.purchase_number}
+    Purchase Status:\t\t${purchase.purchase_status}
+    Total:\t\t${purchase.total}
+    Destination ID:\t\t${purchase.destination_id}
+    Billing ID:\t\t${purchase.billing_id}`;
+
+    return `${basePurchaseInfo}`;
+}
 const browseBooks: (books: Book[]) => Promise<void> = async (books: Book[]) => {
     const cart: Book[] = (inCart || ownerMode) ? books : userCart;
     let bookIndex: number = 0;
@@ -347,6 +361,39 @@ ${ownerMode ? `\n\t"drop" to remove current book from the "shelves".` : (inCart 
         }
     }
     userCart = cart;
+};
+const browsePurchases: (purchases: Purchase[]) => Promise<void> = async (purchases: Purchase[]) => {
+    const purchaseHistory: Purchase[] = purchases;
+    let purchaseIndex = 0;
+    let purchaseInfo: string = purchases.length !== 0 ? purchaseInfoTemplate(purchases, purchaseIndex) : "No purchases have been made.";
+    let browsingCommand: string = "";
+    let argv: string[] = [];
+    while (browsingCommand !== "exit") {
+        console.clear();
+
+        const prompt: string = `Viewing ${guestMode ? `purchase history for ${currentUser}` : "the purchase history"}.
+        "next" or "prev" for next/previous purchase.`
+
+        argv = (await askQuestion(prompt)).trim().toLowerCase().split(" ");
+        browsingCommand = argv[0];
+        argv = argv.splice(1);
+
+        if (browsingCommand === "next" && (purchases.length!==0)) {
+            if (purchaseIndex < (purchases.length - 1)) {
+                purchaseIndex++;
+                purchaseInfo = purchaseInfoTemplate(purchases, purchaseIndex);
+            } else if (purchaseInfo[purchaseInfo.length - 1] !== "!") {
+                purchaseInfo += "\nNo next purchase!";
+            }
+        } else if (browsingCommand === "prev" && (purchases.length!==0)) {
+            if (purchaseIndex > 0) {
+                purchaseIndex--;
+                purchaseInfo = purchaseInfoTemplate(purchases, purchaseIndex);
+            } else if (purchaseInfo[purchaseInfo.length - 1] !== "!") {
+                purchaseInfo += "\nNo previous purchase!";
+            }
+        }
+    }
 };
 const checkout: () => Promise<void> = async () => {
     // don't checkout if cart is empty
