@@ -551,6 +551,58 @@ const getTotalPrice: (books: Book[]) => number = (books: Book[]) => {
     });
     return total;
 };
+const addBook: () => Promise<void> = async () => {
+    const newBook: Book = {
+        isbn: "",
+        book_name: "",
+        author: "",
+        genre: "",
+        publisher: "",
+        price: "$0.00",
+        pages: 0,
+        royalty: 0,
+        stock: 0
+    };
+    console.clear();
+    console.log(`Beginning the addition of a new book process. Follow the prompts, and type "exit" to exit anytime.\n`);
+    let gotInfo: any = await getInfo(newBook, Object.keys(newBook), true, "book");
+    if (gotInfo !== "exit") {
+        // TODO check if have enough cash on hand to order $count copies of new
+        const values: any = Object.keys(gotInfo).map((key: string) => {
+            if (key === "count" || key === "pages") {
+                return parseInt(gotInfo[`${key}`], 10);
+            } else if (key === "price" || key === "royalty") {
+                return parseFloat(gotInfo[`${key}`]);
+            } else {
+                return gotInfo[`${key}`];
+            }
+        });
+        let publisherExists: boolean = (await pgClient.query(`SELECT EXISTS (SELECT * FROM publisher WHERE publisher_name = '${gotInfo.publisher}')`)).rows[0].exists;
+        if (!publisherExists) {
+            const newPublisher: Publisher = {
+                publisher_name: gotInfo.publisher,
+                street: "",
+                city: "",
+                zip: "",
+                email: "",
+                phone: ""
+            };
+            console.log("Seems like this book has a new publisher. You should add information for this publisher for the purpose of paying royalties, buying new copies of books, etc.");
+            gotInfo = await getInfo(newPublisher, ["banking_account", "email", "phone_number", "publisher_address"], false, "publisher");
+            if (gotInfo !== "exit") {
+                gotInfo.banking_account = parseInt(gotInfo.banking_account, 10);
+                gotInfo.publisher_name = newPublisher.publisher_name;
+                await pgClient.query(`INSERT INTO publisher VALUES ($1, $2, $3, $4, $5)`, Object.values(gotInfo));
+                publisherExists = true;
+                console.log(`Added "${newPublisher.publisher_name}" to the list of publishers.`);
+            }
+        }
+        if (publisherExists) {
+            await pgClient.query(`INSERT INTO book VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, values);
+            console.log(`Added "${newBook.book_name}" to the bookstore.`);
+        }
+    }
+};
 
 // REPLs for the program
 const loggedInRepl: () => Promise<void> = async () => {
@@ -590,56 +642,7 @@ const loggedInRepl: () => Promise<void> = async () => {
         } else if (command === "checkout") {
             await checkout();
         } else if (command === "add" && ownerMode) {
-            const newBook: Book = {
-                isbn: "",
-                book_name: "",
-                author: "",
-                genre: "",
-                publisher: "",
-                price: "$0.00",
-                pages: 0,
-                royalty: 0,
-                stock: 0
-            };
-            console.clear();
-            console.log(`Beginning the addition of a new book process. Follow the prompts, and type "exit" to exit anytime.\n`);
-            let gotInfo: any = await getInfo(newBook, Object.keys(newBook), true, "book");
-            if (gotInfo !== "exit") {
-                // TODO check if have enough cash on hand to order $count copies of new
-                const values: any = Object.keys(gotInfo).map((key: string) => {
-                    if (key === "count" || key === "pages") {
-                        return parseInt(gotInfo[`${key}`], 10);
-                    } else if (key === "price" || key === "royalty") {
-                        return parseFloat(gotInfo[`${key}`]);
-                    } else {
-                        return gotInfo[`${key}`];
-                    }
-                });
-                let publisherExists: boolean = (await pgClient.query(`SELECT EXISTS (SELECT * FROM publisher WHERE publisher_name = '${gotInfo.publisher}')`)).rows[0].exists;
-                if (!publisherExists) {
-                    const newPublisher: Publisher = {
-                        publisher_name: gotInfo.publisher,
-                        street: "",
-                        city: "",
-                        zip: "",
-                        email: "",
-                        phone: ""
-                    };
-                    console.log("Seems like this book has a new publisher. You should add information for this publisher for the purpose of paying royalties, buying new copies of books, etc.");
-                    gotInfo = await getInfo(newPublisher, ["banking_account", "email", "phone_number", "publisher_address"], false, "publisher");
-                    if (gotInfo !== "exit") {
-                        gotInfo.banking_account = parseInt(gotInfo.banking_account, 10);
-                        gotInfo.publisher_name = newPublisher.publisher_name;
-                        await pgClient.query(`INSERT INTO publisher VALUES ($1, $2, $3, $4, $5)`, Object.values(gotInfo));
-                        publisherExists = true;
-                        console.log(`Added "${newPublisher.publisher_name}" to the list of publishers.`);
-                    }
-                }
-                if (publisherExists) {
-                    await pgClient.query(`INSERT INTO book VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, values);
-                    console.log(`Added "${newBook.book_name}" to the bookstore.`);
-                }
-            }
+            await addBook();
         } else if (command === "publisher" && ownerMode) {
             let queryText: string = `SELECT * FROM publisher`;
             if (argv.length === 0) {
