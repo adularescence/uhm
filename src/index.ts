@@ -649,6 +649,80 @@ const browsePublisher: (rawInput: string, argv: string[]) => Promise<void> = asy
         }
     }
 };
+const register: () => Promise<void> = async () => {
+    const existingUsers: BookstoreUser[] = (await pgClient.query("SELECT user_name FROM bookstore_user")).rows;
+    let usernameExists: boolean = true;
+    const newUser: BookstoreUser = {
+        user_name: "",
+        pass: "",
+        superuser: false,
+        contact_info_id: 0,
+        billing_info_id: 0,
+    };
+    while (usernameExists) {
+        newUser.user_name = (await askQuestion("What would you like your new username to be?\n> ")).trim();
+        usernameExists = false;
+        existingUsers.forEach((existingUser) => {
+            if (existingUser.user_name === newUser.user_name) {
+                usernameExists = true;
+                console.log("That username is already taken.");
+            }
+        });
+    }
+    newUser.pass = (await askQuestion("What would you like your new password to be?\n> ")).trim();
+    const accept: string = (await askQuestion(`Your username shall be '${newUser.user_name} and your password shall be ${newUser.pass}, is this okay (Y/n)?\n> `)).trim();
+    if (accept.toLowerCase() === "y" || accept.toLowerCase() === "yes" || accept === "") {
+        console.log("We will also need your contact info.");
+        let contactInfo: ContactInfo = {
+            id: 0,
+            street: "",
+            city: "",
+            zip: "",
+            first_name: "",
+            last_name: "",
+            phone: ""
+        };
+        contactInfo = await getInfo(contactInfo, objectDifference(contactInfo, ["id"], "keys"), false, "info");
+
+        console.log("Finally, we will need your billing info.");
+        let billingInfo: BillingInfo = {
+            id: 0,
+            street: "",
+            city: "",
+            zip: "",
+            first_name: "",
+            last_name: "",
+            phone: "",
+            card_number: "",
+            cvv: "",
+            expiry: ""
+        };
+        const sameAsContact: boolean = (await askQuestion("Is your billing adderess the same as your contact info (yes, no)?")).trim().toLowerCase() === "yes";
+        if (sameAsContact) {
+            Object.keys(contactInfo).forEach((key) => {
+                billingInfo[`${key}`] = contactInfo[`${key}`];
+            });
+            billingInfo = await getInfo(billingInfo, ["card_number", "cvv", "expiry"], false, "info");
+        } else {
+            billingInfo = await getInfo(billingInfo, objectDifference(billingInfo, ["id"], "keys"), false, "info");
+        }
+        let queryText: string = "INSERT INTO contact_info (street, city, zip, first_name, last_name, phone) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *";
+        let values = objectDifference(contactInfo, ["id"], "values");
+        const insertedContactInfo: ContactInfo = (await pgClient.query(queryText, values)).rows[0];
+        newUser.contact_info_id = insertedContactInfo.id;
+
+        queryText = "INSERT INTO billing_info (street, city, zip, first_name, last_name, phone, card_number, cvv, expiry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *";
+        values = objectDifference(billingInfo, ["id"], "values");
+        const insertedBillingInfo: BillingInfo = (await pgClient.query(queryText, values)).rows[0];
+        newUser.billing_info_id = insertedBillingInfo.id;
+
+        queryText = "INSERT INTO bookstore_user (user_name, pass, superuser, contact_info_id, billing_info_id) VALUES ($1, $2, $3, $4, $5)";
+        await pgClient.query(queryText, Object.values(newUser));
+        console.log("A new user has been added to the database.\n");
+    } else {
+        console.log("Cancelled registration.");
+    }
+};
 
 // REPLs for the program
 const loggedInRepl: () => Promise<void> = async () => {
@@ -724,78 +798,7 @@ const mainRepl: () => void = async () => {
                 console.error("Sorry, you're not in the database (which means you should make a new user), or the password you entered is not the correct one.");
             }
         } else if (command === "register") {
-            const existingUsers: BookstoreUser[] = (await pgClient.query("SELECT user_name FROM bookstore_user")).rows;
-            let usernameExists: boolean = true;
-            const newUser: BookstoreUser = {
-                user_name: "",
-                pass: "",
-                superuser: false,
-                contact_info_id: 0,
-                billing_info_id: 0,
-            };
-            while (usernameExists) {
-                newUser.user_name = (await askQuestion("What would you like your new username to be?\n> ")).trim();
-                usernameExists = false;
-                existingUsers.forEach((existingUser) => {
-                    if (existingUser.user_name === newUser.user_name) {
-                        usernameExists = true;
-                        console.log("That username is already taken.");
-                    }
-                });
-            }
-            newUser.pass = (await askQuestion("What would you like your new password to be?\n> ")).trim();
-            const accept: string = (await askQuestion(`Your username shall be '${newUser.user_name} and your password shall be ${newUser.pass}, is this okay (Y/n)?\n> `)).trim();
-            if (accept.toLowerCase() === "y" || accept.toLowerCase() === "yes" || accept === "") {
-                console.log("We will also need your contact info.");
-                let contactInfo: ContactInfo = {
-                    id: 0,
-                    street: "",
-                    city: "",
-                    zip: "",
-                    first_name: "",
-                    last_name: "",
-                    phone: ""
-                };
-                contactInfo = await getInfo(contactInfo, objectDifference(contactInfo, ["id"], "keys"), false, "info");
-
-                console.log("Finally, we will need your billing info.");
-                let billingInfo: BillingInfo = {
-                    id: 0,
-                    street: "",
-                    city: "",
-                    zip: "",
-                    first_name: "",
-                    last_name: "",
-                    phone: "",
-                    card_number: "",
-                    cvv: "",
-                    expiry: ""
-                };
-                const sameAsContact: boolean = (await askQuestion("Is your billing adderess the same as your contact info (yes, no)?")).trim().toLowerCase() === "yes";
-                if (sameAsContact) {
-                    Object.keys(contactInfo).forEach((key) => {
-                        billingInfo[`${key}`] = contactInfo[`${key}`];
-                    });
-                    billingInfo = await getInfo(billingInfo, ["card_number", "cvv", "expiry"], false, "info");
-                } else {
-                    billingInfo = await getInfo(billingInfo, objectDifference(billingInfo, ["id"], "keys"), false, "info");
-                }
-                let queryText: string = "INSERT INTO contact_info (street, city, zip, first_name, last_name, phone) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *";
-                let values = objectDifference(contactInfo, ["id"], "values");
-                const insertedContactInfo: ContactInfo = (await pgClient.query(queryText, values)).rows[0];
-                newUser.contact_info_id = insertedContactInfo.id;
-
-                queryText = "INSERT INTO billing_info (street, city, zip, first_name, last_name, phone, card_number, cvv, expiry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *";
-                values = objectDifference(billingInfo, ["id"], "values");
-                const insertedBillingInfo: BillingInfo = (await pgClient.query(queryText, values)).rows[0];
-                newUser.billing_info_id = insertedBillingInfo.id;
-
-                queryText = "INSERT INTO bookstore_user (user_name, pass, superuser, contact_info_id, billing_info_id) VALUES ($1, $2, $3, $4, $5)";
-                await pgClient.query(queryText, Object.values(newUser));
-                console.log("A new user has been added to the database.\n");
-            } else {
-                console.log("Cancelled registration.");
-            }
+            await register();
         } else if (command === "search") {
             await search();
         } else if (command === "turn") {
