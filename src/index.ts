@@ -253,7 +253,6 @@ ${(guestMode || inCart) ? "" : `\n\t"add <count>" to add <count> copies of curre
 ${ownerMode ? `\n\t"drop" to remove current book from the "shelves".` : (inCart ? `\n\t"drop <count>" to remove <count> copies of current book from cart.` : "")}
         "exit" to exit.${!ownerMode ? `\n\tTotal price of added books in cart: $${getTotalPrice(cart)}` : ""}\n${bookInfo}\n`;
 
-        // TODO add/drop <number of books to add/drop>
         argv = (await askQuestion(prompt)).trim().toLowerCase().split(" ");
         browsingCommand = argv[0];
         argv = argv.splice(1);
