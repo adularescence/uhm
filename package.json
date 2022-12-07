@@ -4,7 +4,7 @@
   "description": "![Origins](/uhm.png)",
   "main": "src/index.ts",
   "dependencies": {
-    "body-parser": "^1.19.0",
+    "body-parser": "^1.20.1",
     "pg": "^7.12.1"
   },
   "devDependencies": {
